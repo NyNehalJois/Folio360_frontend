@@ -1,0 +1,242 @@
+import React from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider } from '@/app/AuthContext';
+import { ProtectedRoute } from '@/app/ProtectedRoute';
+import { ThemeProvider } from '@/design/theme';
+import { LoginPage } from '@/features/auth/LoginPage';
+import { OAuthCallbackPage } from '@/features/auth/OAuthCallbackPage';
+import { ForgotPasswordPage, ResetPasswordPage } from '@/features/auth/PasswordResetPages';
+import { RegisterPage } from '@/features/auth/RegisterPage';
+import { UsernameOnboardingPage } from '@/features/auth/UsernameOnboardingPage';
+import {
+  VerificationFailedPage,
+  VerificationSentPage,
+  VerificationSuccessPage,
+  VerifyEmailPage,
+} from '@/features/auth/VerifyEmailPages';
+import { HomePage } from '@/features/home/HomePage';
+import { OverviewPage } from '@/features/overview/OverviewPage';
+import { ModuleScaffoldPage } from '@/features/workspace/ModuleScaffoldPage';
+import { WorkspaceLayout } from '@/layouts/WorkspaceLayout';
+import {
+  certificatesService,
+  documentsService,
+  educationService,
+  experienceService,
+  projectsService,
+  resumesService,
+  sharingService,
+  skillsService,
+} from '@/services/api';
+
+export const App: React.FC = () => {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/auth/login" element={<LoginPage />} />
+            <Route path="/auth/register" element={<RegisterPage />} />
+            <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/auth/verification-sent" element={<VerificationSentPage />} />
+            <Route path="/auth/verification-success" element={<VerificationSuccessPage />} />
+            <Route path="/auth/verification-failed" element={<VerificationFailedPage />} />
+            <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/auth/callback" element={<OAuthCallbackPage />} />
+            <Route
+              path="/onboarding/username"
+              element={
+                <ProtectedRoute requireUsername={false}>
+                  <UsernameOnboardingPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/workspace"
+              element={
+                <ProtectedRoute>
+                  <WorkspaceLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<OverviewPage />} />
+              <Route
+                path="profile"
+                element={
+                  <ModuleScaffoldPage
+                    sectionCode="MODULE 02 — PROFILE"
+                    title="Personal Profile"
+                    description="Manage your public slug, headline, biography, avatar, and social links."
+                    contractEndpoints={[
+                      'GET /api/v1/profile/me',
+                      'PATCH /api/v1/profile/me',
+                      'POST /api/v1/profile/me/avatar',
+                      'GET /api/v1/profile/slug-availability',
+                    ]}
+                  />
+                }
+              />
+              <Route
+                path="education"
+                element={
+                  <ModuleScaffoldPage
+                    sectionCode="MODULE 03 & 04 — EDUCATION & VTU ACADEMICS"
+                    title="Academic Journey"
+                    description="Maintain qualifications, VTU 2022 CSE semester records, grade calculator, and CGPA trends."
+                    contractEndpoints={[
+                      'GET /api/v1/education',
+                      'GET /api/v1/academics/curriculum',
+                      'GET /api/v1/academics/records',
+                      'POST /api/v1/academics/calculate/sgpa',
+                    ]}
+                    loadCount={async () => (await educationService.list()).total}
+                  />
+                }
+              />
+              <Route
+                path="projects"
+                element={
+                  <ModuleScaffoldPage
+                    sectionCode="MODULE 05 & 06 — PROJECTS & GITHUB"
+                    title="Projects Portfolio"
+                    description="Curate projects, screenshots, reports, and authorized GitHub repository imports."
+                    contractEndpoints={[
+                      'GET /api/v1/projects',
+                      'POST /api/v1/projects',
+                      'GET /api/v1/github/repositories',
+                      'POST /api/v1/github/repositories/import',
+                    ]}
+                    loadCount={async () => (await projectsService.list()).total}
+                  />
+                }
+              />
+              <Route
+                path="skills"
+                element={
+                  <ModuleScaffoldPage
+                    sectionCode="MODULE 07 — SKILLS"
+                    title="Skills Management"
+                    description="Organize technical and soft skills linked to your projects, certificates, and roles."
+                    contractEndpoints={[
+                      'GET /api/v1/skills/catalog',
+                      'GET /api/v1/skills/me',
+                      'POST /api/v1/skills/me',
+                      'POST /api/v1/skills/suggestions',
+                    ]}
+                    loadCount={async () => (await skillsService.listMine()).total}
+                  />
+                }
+              />
+              <Route
+                path="certificates"
+                element={
+                  <ModuleScaffoldPage
+                    sectionCode="MODULE 08 — CERTIFICATES"
+                    title="Certificates & Achievements"
+                    description="Track credentials, verification URLs, and self-reported vs. link-provided statuses."
+                    contractEndpoints={[
+                      'GET /api/v1/certificates',
+                      'POST /api/v1/certificates',
+                      'GET /api/v1/achievements',
+                    ]}
+                    loadCount={async () => (await certificatesService.list()).total}
+                  />
+                }
+              />
+              <Route
+                path="experience"
+                element={
+                  <ModuleScaffoldPage
+                    sectionCode="MODULE 09 — EXPERIENCE"
+                    title="Experience Timeline"
+                    description="Document internships, employment, volunteering, mentorship, and leadership."
+                    contractEndpoints={[
+                      'GET /api/v1/experience',
+                      'POST /api/v1/experience',
+                      'PATCH /api/v1/experience/{id}',
+                    ]}
+                    loadCount={async () => (await experienceService.list()).total}
+                  />
+                }
+              />
+              <Route
+                path="documents"
+                element={
+                  <ModuleScaffoldPage
+                    sectionCode="MODULE 10 — DOCUMENT VAULT & OCR"
+                    title="Document Vault"
+                    description="Private-by-default file storage with signed previews and OCR review confirmation."
+                    contractEndpoints={[
+                      'POST /api/v1/documents',
+                      'GET /api/v1/documents/{id}/preview',
+                      'GET /api/v1/document-processing/review-queue',
+                      'POST /api/v1/document-processing/{job_id}/confirm',
+                    ]}
+                    loadCount={async () => (await documentsService.list()).total}
+                  />
+                }
+              />
+              <Route
+                path="resumes"
+                element={
+                  <ModuleScaffoldPage
+                    sectionCode="MODULE 11 — RESUME STUDIO"
+                    title="Resume Studio"
+                    description="Standard editorial PDF resume builder and grounded AI-assisted tailoring."
+                    contractEndpoints={[
+                      'GET /api/v1/resumes/templates',
+                      'POST /api/v1/resumes/{id}/preview',
+                      'POST /api/v1/resumes/{id}/generate-pdf',
+                      'POST /api/v1/resumes/ai/analyze-job',
+                    ]}
+                    loadCount={async () => (await resumesService.list()).total}
+                  />
+                }
+              />
+              <Route
+                path="sharing"
+                element={
+                  <ModuleScaffoldPage
+                    sectionCode="MODULE 12 & 13 — PUBLIC PROFILE & PRIVATE SHARING"
+                    title="Sharing & QR"
+                    description="Configure public profile visibility, generate QR codes, and manage expiring private links."
+                    contractEndpoints={[
+                      'GET /api/v1/profile/me/visibility',
+                      'GET /api/v1/public/profiles/{slug}',
+                      'POST /api/v1/sharing/links',
+                      'GET /api/v1/sharing/links',
+                    ]}
+                    loadCount={async () => (await sharingService.listLinks()).total}
+                  />
+                }
+              />
+              <Route
+                path="settings"
+                element={
+                  <ModuleScaffoldPage
+                    sectionCode="ACCOUNT & PREFERENCES"
+                    title="Settings"
+                    description="Manage active sessions, OAuth connections, theme preferences, and security logs."
+                    contractEndpoints={[
+                      'GET /api/v1/account',
+                      'GET /api/v1/auth/sessions',
+                      'GET /api/v1/account/security-log',
+                      'PATCH /api/v1/profile/me/preferences',
+                    ]}
+                  />
+                }
+              />
+            </Route>
+
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
+  );
+};
+
+export default App;

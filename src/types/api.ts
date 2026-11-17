@@ -1,0 +1,1055 @@
+/* ==========================================================================
+   FOLIO360 — API CONTRACT REVISION 2 TYPESCRIPT INTERFACES
+   Source of truth: API Contract Revision 2 (/api/v1)
+   ========================================================================== */
+
+export type UUID = string;
+export type Visibility = 'private' | 'public';
+export type DateString = string; // YYYY-MM-DD
+export type Timestamp = string;  // ISO 8601 UTC
+
+export interface DocumentRef {
+  id: UUID;
+  title: string;
+  category: DocumentCategory;
+  mime_type: string;
+}
+
+export interface SignedUrl {
+  url: string;
+  expires_at: Timestamp;
+}
+
+/* --- Error & Pagination Conventions (§1.4, §1.5) --- */
+
+export type ApiErrorCode =
+  | 'BAD_REQUEST'
+  | 'AI_CONSENT_REQUIRED'
+  | 'UNAUTHENTICATED'
+  | 'TOKEN_EXPIRED'
+  | 'INVALID_CREDENTIALS'
+  | 'EMAIL_NOT_VERIFIED'
+  | 'REAUTH_REQUIRED'
+  | 'FORBIDDEN'
+  | 'NOT_FOUND'
+  | 'EMAIL_TAKEN'
+  | 'SLUG_TAKEN'
+  | 'DOCUMENT_IN_USE'
+  | 'ACCOUNT_EXISTS_UNVERIFIED'
+  | 'OAUTH_EMAIL_UNVERIFIED'
+  | 'OAUTH_DENIED'
+  | 'OAUTH_STATE_INVALID'
+  | 'PROCESSING_NOT_READY'
+  | 'CONFLICT'
+  | 'SHARE_LINK_EXPIRED'
+  | 'SHARE_LINK_REVOKED'
+  | 'FILE_TOO_LARGE'
+  | 'UNSUPPORTED_FILE_TYPE'
+  | 'VALIDATION_ERROR'
+  | 'INVALID_REFERENCE'
+  | 'RATE_LIMITED'
+  | 'INTERNAL_ERROR'
+  | 'AI_UNAVAILABLE'
+  | 'OCR_UNAVAILABLE'
+  | 'NETWORK_ERROR';
+
+export interface ApiErrorDetail {
+  field?: string;
+  issue?: string;
+  entity_type?: string;
+  entity_id?: UUID;
+  label?: string;
+}
+
+export interface ApiErrorPayload {
+  error: {
+    code: ApiErrorCode | string;
+    message: string;
+    details?: ApiErrorDetail[];
+    request_id?: string;
+  };
+}
+
+export interface PaginationParams {
+  page?: number;
+  page_size?: number;
+  sort?: string;
+}
+
+export interface Paginated<T> {
+  items: T[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface ItemsResponse<T> {
+  items: T[];
+}
+
+/* --- 5.0 System --- */
+
+export interface HealthStatus {
+  status: string;
+  db: string;
+  storage: string;
+}
+
+/* --- 5.1 Authentication (/auth) --- */
+
+export type ClientType = 'web' | 'mobile';
+export type OAuthProvider = 'google' | 'github';
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  full_name: string;
+  client_type: ClientType;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+  client_type: ClientType;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: 'bearer';
+  expires_in: number;
+  refresh_token?: string; // mobile only; web uses httpOnly cookie
+}
+
+export interface CurrentUser {
+  id: UUID;
+  email: string;
+  email_verified: boolean;
+  full_name: string;
+  slug: string;
+  avatar_url: string | null;
+  has_password: boolean;
+  linked_providers: OAuthProvider[];
+  created_at: Timestamp;
+}
+
+export interface AuthResponse extends TokenResponse {
+  user: CurrentUser;
+}
+
+export interface Session {
+  id: UUID;
+  client_type: ClientType;
+  device_label: string;
+  created_at: Timestamp;
+  last_used_at: Timestamp;
+  current: boolean;
+}
+
+export interface OAuthExchangeRequest {
+  code: string;
+  code_verifier?: string;
+}
+
+/* --- 5.2 Account (/account) --- */
+
+export interface Account {
+  id: UUID;
+  email: string;
+  email_verified: boolean;
+  pending_email: string | null;
+  has_password: boolean;
+  created_at: Timestamp;
+}
+
+export interface Connection {
+  provider: OAuthProvider;
+  provider_email: string | null;
+  linked_at: Timestamp;
+}
+
+export interface AuditEvent {
+  id: UUID;
+  action: string;
+  ip_address: string | null;
+  device_label: string | null;
+  created_at: Timestamp;
+}
+
+export interface DataExport {
+  id: UUID;
+  status: 'queued' | 'ready' | 'failed' | 'expired';
+  download?: SignedUrl;
+  created_at: Timestamp;
+}
+
+/* --- 5.3 Profile (/profile) --- */
+
+export interface ProfileLinkItem {
+  label: string;
+  url: string;
+}
+
+export interface Profile {
+  user_id: UUID;
+  slug: string;
+  public_url: string;
+  full_name: string;
+  headline: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  location: string | null;
+  contact_email: string | null;
+  phone: string | null;
+  website: string | null;
+  links: {
+    linkedin?: string;
+    github?: string;
+    other: ProfileLinkItem[];
+  };
+  interests: string[];
+  updated_at: Timestamp;
+}
+
+export type ProfileUpdate = Partial<
+  Omit<Profile, 'user_id' | 'slug' | 'public_url' | 'avatar_url' | 'updated_at'>
+>;
+
+export interface PublicSettings {
+  public_enabled: boolean;
+  discoverable: boolean;
+  public_sections: {
+    education: boolean;
+    projects: boolean;
+    skills: boolean;
+    certificates: boolean;
+    experience: boolean;
+    achievements: boolean;
+    academics_cgpa: boolean;
+  };
+  public_contact: {
+    show_email: boolean;
+    show_phone: boolean;
+    show_location: boolean;
+  };
+}
+
+export type ThemePreference = 'light' | 'dark' | 'system';
+
+export interface Preferences {
+  theme: ThemePreference;
+}
+
+export interface CompletenessItem {
+  key: string;
+  label: string;
+  done: boolean;
+  weight: number;
+  action_route: string;
+}
+
+export interface Completeness {
+  percent: number;
+  items: CompletenessItem[];
+}
+
+export interface SlugAvailability {
+  slug: string;
+  available: boolean;
+  reason?: string;
+}
+
+/* --- 5.4 Education (/education) --- */
+
+export type EducationResultType = 'cgpa' | 'percentage' | 'grade' | 'none';
+
+export interface EducationCreate {
+  institution: string;
+  degree: string;
+  programme?: string;
+  branch?: string;
+  specialization?: string;
+  start_year: number;
+  end_year?: number | null;
+  is_current: boolean;
+  scheme_id?: UUID | null;
+  result_type: EducationResultType;
+  result_value?: string | null;
+  show_result_publicly: boolean;
+  achievements: string[];
+  document_ids: UUID[];
+  visibility: Visibility;
+}
+
+export interface Education extends Omit<EducationCreate, 'document_ids'> {
+  id: UUID;
+  result_source: 'manual' | 'computed';
+  computed_cgpa: number | null;
+  documents: DocumentRef[];
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+/* --- 5.5 Academics (/academics) --- */
+
+export interface DataStatus {
+  verified: boolean;
+  source_reference: string | null;
+  verified_at: Timestamp | null;
+}
+
+export interface University {
+  id: UUID;
+  code: string;
+  name: string;
+}
+
+export interface Scheme {
+  id: UUID;
+  university_id: UUID;
+  code: string;
+  name: string;
+  data_status: DataStatus;
+}
+
+export interface Branch {
+  id: UUID;
+  code: string;
+  name: string;
+}
+
+export interface SemesterInfo {
+  number: number;
+  total_credits: number;
+}
+
+export interface CurriculumSubject {
+  id: UUID;
+  code: string;
+  name: string;
+  credits: number;
+  category: string;
+  elective_group: string | null;
+}
+
+export interface Curriculum {
+  scheme_id: UUID;
+  branch_id: UUID;
+  semester: number;
+  data_status: DataStatus;
+  subjects: CurriculumSubject[];
+}
+
+export interface GradeDefinition {
+  grade: string;
+  grade_point: number;
+  min_marks: number | null;
+  max_marks: number | null;
+  is_pass: boolean;
+}
+
+export interface GradingScale {
+  id: UUID;
+  scheme_id: UUID;
+  name: string;
+  data_status: DataStatus;
+  grades: GradeDefinition[];
+  rules: {
+    sgpa_decimals: number;
+    rounding: 'round_half_up' | 'truncate';
+    failed_credits_in_denominator: boolean;
+    percentage_formula: string | null;
+  };
+}
+
+export interface AcademicRecordCreate {
+  education_id: UUID;
+  semester: number;
+  exam_session?: string;
+  status: 'in_progress' | 'completed';
+  grading_scale_id: UUID;
+  document_ids: UUID[];
+  notes?: string;
+}
+
+export interface SubjectMarks {
+  internal?: number;
+  external?: number;
+  total?: number;
+}
+
+export interface SubjectResultInput {
+  curriculum_subject_id?: UUID | null;
+  code?: string;
+  name?: string;
+  credits?: number;
+  grade: string;
+  marks?: SubjectMarks;
+}
+
+export interface SubjectResult {
+  id: UUID;
+  curriculum_subject_id: UUID | null;
+  is_manual: boolean;
+  code: string;
+  name: string;
+  credits: number;
+  grade: string;
+  grade_point: number;
+  marks: SubjectMarks | null;
+}
+
+export interface AcademicRecord {
+  id: UUID;
+  education_id: UUID;
+  semester: number;
+  exam_session: string | null;
+  status: 'in_progress' | 'completed';
+  grading_scale_id: UUID;
+  subjects: SubjectResult[];
+  sgpa: number | null;
+  total_credits: number;
+  credits_earned: number;
+  documents: DocumentRef[];
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export type AcademicRecordSummary = Omit<AcademicRecord, 'subjects' | 'documents'>;
+
+export interface AcademicSummary {
+  education_id: UUID;
+  cgpa: number | null;
+  percentage: number | null;
+  total_credits: number;
+  credits_earned: number;
+  semesters: {
+    record_id: UUID;
+    semester: number;
+    sgpa: number | null;
+    credits: number;
+  }[];
+  subject_performance: {
+    grade: string;
+    count: number;
+  }[];
+  data_status: DataStatus;
+}
+
+export interface SgpaCalcRequest {
+  grading_scale_id: UUID;
+  subjects: { credits: number; grade: string }[];
+}
+
+export interface SgpaCalcResult {
+  sgpa: number | null;
+  total_credits: number;
+  credit_points: number;
+  credits_earned: number;
+}
+
+export interface CgpaCalcRequest {
+  grading_scale_id: UUID;
+  semesters: { credits: number; grade: string }[][];
+}
+
+export interface CgpaCalcResult {
+  cgpa: number | null;
+  total_credits: number;
+  credit_points: number;
+}
+
+/* --- 5.6 Projects (/projects) --- */
+
+export interface ProjectCreate {
+  title: string;
+  summary: string;
+  description?: string;
+  category: string;
+  technologies: string[];
+  skill_ids: UUID[];
+  github_url?: string | null;
+  live_url?: string | null;
+  start_date?: DateString | null;
+  end_date?: DateString | null;
+  is_ongoing: boolean;
+  report_document_id?: UUID | null;
+  featured: boolean;
+  order: number;
+  visibility: Visibility;
+}
+
+export interface ProjectImage {
+  id: UUID;
+  url: string;
+  alt: string | null;
+  order: number;
+}
+
+export interface Project extends Omit<ProjectCreate, 'report_document_id' | 'skill_ids'> {
+  id: UUID;
+  images: ProjectImage[];
+  skills: { id: UUID; name: string }[];
+  report_document: DocumentRef | null;
+  github_import: { repo_full_name: string; imported_at: Timestamp } | null;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+/* --- 5.7 GitHub Integration (/github) --- */
+
+export interface GithubConnection {
+  connected: boolean;
+  username: string | null;
+  avatar_url: string | null;
+  connected_at: Timestamp | null;
+}
+
+export interface GithubRepo {
+  full_name: string;
+  name: string;
+  description: string | null;
+  html_url: string;
+  homepage: string | null;
+  languages: Record<string, number>;
+  topics: string[];
+  stars: number;
+  updated_at: Timestamp;
+  already_imported: boolean;
+}
+
+export interface GithubImportResult {
+  created: Project[];
+  skipped: { full_name: string; reason: string }[];
+}
+
+/* --- 5.8 Skills (/skills) --- */
+
+export type SkillCategory =
+  | 'language'
+  | 'framework'
+  | 'tool'
+  | 'technical'
+  | 'soft'
+  | 'communication'
+  | 'other';
+
+export type ProficiencyLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
+
+export interface CatalogSkill {
+  id: UUID;
+  name: string;
+  category: SkillCategory;
+}
+
+export interface UserSkillCreate {
+  skill_id?: UUID;
+  name?: string;
+  category?: SkillCategory;
+  proficiency?: ProficiencyLevel | null;
+  project_ids: UUID[];
+  certificate_ids: UUID[];
+  experience_ids: UUID[];
+  visibility: Visibility;
+  order?: number;
+}
+
+export interface UserSkill {
+  id: UUID;
+  skill: CatalogSkill;
+  proficiency: ProficiencyLevel | null;
+  self_reported: true;
+  used_in: {
+    type: 'project' | 'certificate' | 'experience';
+    id: UUID;
+    label: string;
+  }[];
+  visibility: Visibility;
+  order: number;
+}
+
+export interface SkillSuggestion {
+  name: string;
+  skill_id: UUID | null;
+  category: SkillCategory;
+  reasons: {
+    source_type: 'project' | 'certificate' | 'experience';
+    source_id: UUID;
+    label: string;
+    matched_text: string;
+  }[];
+}
+
+/* --- 5.9 Certificates (/certificates) --- */
+
+export interface CertificateCreate {
+  name: string;
+  issuer: string;
+  issue_date?: DateString | null;
+  expiry_date?: DateString | null;
+  credential_id?: string | null;
+  verification_url?: string | null;
+  document_id?: UUID | null;
+  skill_ids: UUID[];
+  visibility: Visibility;
+}
+
+export interface Certificate extends Omit<CertificateCreate, 'document_id' | 'skill_ids'> {
+  id: UUID;
+  verification_status: 'self_reported' | 'link_provided' | 'issuer_verified';
+  document: DocumentRef | null;
+  skills: { id: UUID; name: string }[];
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+/* --- 5.10 Experience & Achievements --- */
+
+export type ExperienceType =
+  | 'internship'
+  | 'employment'
+  | 'volunteering'
+  | 'mentorship'
+  | 'leadership'
+  | 'other';
+
+export interface ExperienceCreate {
+  type: ExperienceType;
+  organization: string;
+  role: string;
+  location?: string | null;
+  start_date: DateString;
+  end_date?: DateString | null;
+  is_current: boolean;
+  description?: string;
+  highlights: string[];
+  skill_ids: UUID[];
+  document_ids: UUID[];
+  visibility: Visibility;
+}
+
+export interface Experience extends Omit<ExperienceCreate, 'skill_ids' | 'document_ids'> {
+  id: UUID;
+  skills: { id: UUID; name: string }[];
+  documents: DocumentRef[];
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export type AchievementCategory =
+  | 'award'
+  | 'competition'
+  | 'publication'
+  | 'scholarship'
+  | 'other';
+
+export interface AchievementCreate {
+  title: string;
+  category: AchievementCategory;
+  organization?: string | null;
+  date?: DateString | null;
+  description?: string;
+  document_ids: UUID[];
+  visibility: Visibility;
+}
+
+export interface Achievement extends Omit<AchievementCreate, 'document_ids'> {
+  id: UUID;
+  documents: DocumentRef[];
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+/* --- 5.11 Document Vault (/documents) --- */
+
+export type DocumentCategory =
+  | 'marksheet'
+  | 'certificate'
+  | 'resume'
+  | 'identity'
+  | 'project_report'
+  | 'other';
+
+export type DocumentProcessingStatus =
+  | 'none'
+  | 'queued'
+  | 'running'
+  | 'needs_review'
+  | 'confirmed'
+  | 'rejected'
+  | 'failed';
+
+export interface DocumentCategoryInfo {
+  key: DocumentCategory;
+  label: string;
+}
+
+export interface Document {
+  id: UUID;
+  title: string;
+  original_filename: string;
+  category: DocumentCategory;
+  mime_type: 'application/pdf' | 'image/jpeg' | 'image/png';
+  size_bytes: number;
+  page_count: number | null;
+  sha256: string;
+  notes: string | null;
+  processing_status: DocumentProcessingStatus;
+  attached_to: {
+    entity_type: string;
+    entity_id: UUID;
+    label: string;
+  }[];
+  uploaded_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+/* --- 5.12 Document Processing / OCR (/document-processing) --- */
+
+export interface ProcessingJob {
+  id: UUID;
+  document_id: UUID;
+  status: Exclude<DocumentProcessingStatus, 'none'>;
+  error_code: string | null;
+  created_at: Timestamp;
+  finished_at: Timestamp | null;
+}
+
+export interface ProcessingResult {
+  job_id: UUID;
+  engine: string;
+  text_preview: string;
+  suggested_category: DocumentCategory;
+  category_confidence: number;
+  fields: {
+    key: string;
+    label: string;
+    value: string;
+    confidence: number;
+  }[];
+  suggested_target: {
+    entity_type: 'certificate' | 'academic_record' | 'education' | 'none';
+    prefill: Record<string, unknown>;
+  };
+  warnings: string[];
+}
+
+export interface ProcessingConfirm {
+  category: DocumentCategory;
+  title?: string;
+  target:
+    | { action: 'none' }
+    | {
+        action: 'create';
+        entity_type: 'certificate' | 'education' | 'academic_record';
+        data: Record<string, unknown>;
+      }
+    | {
+        action: 'attach';
+        entity_type: string;
+        entity_id: UUID;
+      };
+}
+
+/* --- 5.13 Resume Studio (/resumes) --- */
+
+export interface ResumeTemplate {
+  id: UUID;
+  key: string;
+  name: string;
+  description: string;
+  preview_image_url: string;
+}
+
+export type ResumeSectionType =
+  | 'summary'
+  | 'education'
+  | 'academics'
+  | 'skills'
+  | 'projects'
+  | 'experience'
+  | 'certificates'
+  | 'achievements';
+
+export interface ResumeSection {
+  type: ResumeSectionType;
+  enabled: boolean;
+  order: number;
+  title_override?: string | null;
+  item_ids: UUID[];
+}
+
+export interface ResumeCreate {
+  title: string;
+  template_id: UUID;
+  mode: 'standard' | 'tailored';
+  personal: {
+    show_email: boolean;
+    show_phone: boolean;
+    show_location: boolean;
+    show_links: ('linkedin' | 'github' | 'website')[];
+  };
+  summary?: string | null;
+  sections: ResumeSection[];
+  overrides: Record<UUID, { bullets?: string[]; description?: string }>;
+  analysis_id?: UUID | null;
+}
+
+export interface Resume extends ResumeCreate {
+  id: UUID;
+  last_pdf_at: Timestamp | null;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export type ResumeSummary = Pick<
+  Resume,
+  'id' | 'title' | 'mode' | 'template_id' | 'updated_at' | 'last_pdf_at'
+>;
+
+export interface JobAnalysis {
+  analysis_id: UUID;
+  title: string | null;
+  requirements: {
+    id: string;
+    text: string;
+    kind: 'skill' | 'experience' | 'education' | 'certification' | 'soft_skill';
+    importance: 'required' | 'preferred';
+    keywords: string[];
+  }[];
+  expires_at: Timestamp;
+}
+
+export interface ProfileMatch {
+  analysis_id: UUID;
+  matches: {
+    requirement_id: string;
+    status: 'matched' | 'partial' | 'missing';
+    evidence: { entity_type: string; entity_id: UUID; label: string }[];
+  }[];
+  recommended: {
+    project_ids: UUID[];
+    experience_ids: UUID[];
+    certificate_ids: UUID[];
+    skill_ids: UUID[];
+  };
+  gaps: string[];
+}
+
+export interface AiGenerateRequest {
+  analysis_id: UUID;
+  consent: true;
+  template_id: UUID;
+  resume_id?: UUID;
+  selected: {
+    project_ids: UUID[];
+    experience_ids: UUID[];
+    certificate_ids: UUID[];
+    skill_ids: UUID[];
+    education_ids: UUID[];
+  };
+  tone?: 'concise' | 'detailed';
+}
+
+export interface AiDraft {
+  resume: Resume;
+  changes: {
+    entity_type: string;
+    entity_id: UUID;
+    field: string;
+    before: string;
+    after: string;
+  }[];
+  warnings: string[];
+}
+
+/* --- 5.14 Public Profiles (/public) --- */
+
+export interface PublicProfileCard {
+  slug: string;
+  full_name: string;
+  headline: string | null;
+  avatar_url: string | null;
+  top_skills: string[];
+}
+
+export interface PublicProfile {
+  slug: string;
+  full_name: string;
+  headline: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  location?: string;
+  contact_email?: string;
+  phone?: string;
+  links: {
+    linkedin?: string;
+    github?: string;
+    website?: string;
+    other: ProfileLinkItem[];
+  };
+  interests: string[];
+  sections: {
+    education?: {
+      institution: string;
+      degree: string;
+      programme?: string;
+      branch?: string;
+      start_year: number;
+      end_year: number | null;
+      result?: string;
+      achievements: string[];
+    }[];
+    academics?: { cgpa: number };
+    projects?: {
+      title: string;
+      summary: string;
+      description?: string;
+      category: string;
+      technologies: string[];
+      images: { url: string; alt: string | null }[];
+      github_url?: string;
+      live_url?: string;
+      start_date?: string;
+      end_date?: string;
+      featured: boolean;
+    }[];
+    skills?: {
+      name: string;
+      category: string;
+      proficiency: string | null;
+    }[];
+    certificates?: {
+      name: string;
+      issuer: string;
+      issue_date?: string;
+      credential_id?: string;
+      verification_url?: string;
+      verification_status: string;
+    }[];
+    experience?: {
+      type: string;
+      organization: string;
+      role: string;
+      start_date: string;
+      end_date: string | null;
+      is_current: boolean;
+      description?: string;
+      highlights: string[];
+    }[];
+    achievements?: {
+      title: string;
+      category: string;
+      organization?: string;
+      date?: string;
+      description?: string;
+    }[];
+  };
+}
+
+/* --- 5.15 Private Sharing (/sharing) --- */
+
+export type ShareItemType =
+  | 'document'
+  | 'education'
+  | 'academic_record'
+  | 'certificate'
+  | 'project'
+  | 'experience'
+  | 'achievement';
+
+export interface ShareLinkCreate {
+  label: string;
+  items: { type: ShareItemType; id: UUID }[];
+  expires_at: Timestamp;
+  allow_download: boolean;
+}
+
+export interface ShareLink {
+  id: UUID;
+  label: string;
+  url: string;
+  items: { type: ShareItemType; id: UUID; label: string }[];
+  expires_at: Timestamp;
+  allow_download: boolean;
+  status: 'active' | 'expired' | 'revoked';
+  access_count: number;
+  last_accessed_at: Timestamp | null;
+  created_at: Timestamp;
+  revoked_at: Timestamp | null;
+}
+
+export interface SharedBundle {
+  owner: {
+    full_name: string;
+    headline: string | null;
+    avatar_url: string | null;
+  };
+  label: string;
+  expires_at: Timestamp;
+  allow_download: boolean;
+  items: (
+    | {
+        type: 'document';
+        id: UUID;
+        title: string;
+        mime_type: string;
+        category: string;
+      }
+    | {
+        type: Exclude<ShareItemType, 'document'>;
+        data: Record<string, unknown>;
+      }
+  )[];
+}
+
+/* --- 5.16 Analytics & Activity (/analytics, /activity) --- */
+
+export type ActivityVerb =
+  | 'created'
+  | 'updated'
+  | 'deleted'
+  | 'uploaded'
+  | 'confirmed'
+  | 'generated'
+  | 'shared';
+
+export interface ActivityEvent {
+  id: UUID;
+  verb: ActivityVerb;
+  entity_type: string;
+  entity_id: UUID | null;
+  label: string;
+  created_at: Timestamp;
+}
+
+export interface DashboardSummary {
+  first_name: string;
+  completeness: { percent: number };
+  continue_items: {
+    key: string;
+    label: string;
+    action_route: string;
+  }[];
+  counts: {
+    projects: number;
+    skills: number;
+    certificates: number;
+    experience: number;
+    documents: number;
+    pending_reviews: number;
+  };
+  recent_activity: ActivityEvent[];
+}
+
+export interface SkillsAnalytics {
+  by_category: { category: string; count: number }[];
+  most_used: { name: string; usage_count: number }[];
+}
+
+export interface ProjectsAnalytics {
+  total: number;
+  public: number;
+  by_category: { category: string; count: number }[];
+  technologies: { name: string; count: number }[];
+}
