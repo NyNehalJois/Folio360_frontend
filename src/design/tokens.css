@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --font-sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ==========================================================================
+   FOLIO360 LOCKED DESIGN TOKENS
+   Source of truth: Locked UI Design System & References
+   ========================================================================== */
+
+:root,
+[data-theme="light"] {
+  --bg-main: #FDFDFC;
+  --bg-secondary: #F7F4EF;
+  --text-primary: #171614;
+  --text-secondary: #71685F;
+  --accent: #A98F7A;
+
+  --btn-primary-bg: #171614;
+  --btn-primary-text: #FDFDFC;
+  --btn-primary-hover: #2C2925;
+
+  --border-subtle: rgba(23, 22, 20, 0.09);
+  --border-medium: rgba(23, 22, 20, 0.16);
+  --border-accent: rgba(169, 143, 122, 0.38);
+
+  --surface-elevated: #FDFDFC;
+  --surface-muted: #F7F4EF;
+  --nav-active-bg: rgba(169, 143, 122, 0.14);
+  --progress-track: rgba(23, 22, 20, 0.12);
+  --progress-fill: #171614;
+  --strand-color: #A98F7A;
+
+  --danger-text: #9B3B2E;
+  --danger-bg: rgba(155, 59, 46, 0.08);
+  --danger-border: rgba(155, 59, 46, 0.25);
+}
+
+[data-theme="dark"] {
+  --bg-main: #171513;
+  --bg-secondary: #24201C;
+  --text-primary: #F5F0E8;
+  --text-secondary: #B8AA9B;
+  --accent: #B99A80;
+
+  --btn-primary-bg: #F5F0E8;
+  --btn-primary-text: #171513;
+  --btn-primary-hover: #E7DFD3;
+
+  --border-subtle: #3A332D;
+  --border-medium: #4A4139;
+  --border-accent: rgba(185, 154, 128, 0.36);
+
+  --surface-elevated: #1D1A17;
+  --surface-muted: #24201C;
+  --nav-active-bg: linear-gradient(90deg, rgba(185, 154, 128, 0.22) 0%, rgba(36, 32, 28, 0.5) 100%);
+  --progress-track: rgba(245, 240, 232, 0.14);
+  --progress-fill: #F5F0E8;
+  --strand-color: #B99A80;
+
+  --danger-text: #E58C7D;
+  --danger-bg: rgba(229, 140, 125, 0.10);
+  --danger-border: rgba(229, 140, 125, 0.28);
+}
+
+@layer base {
+  html {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+  }
+
+  html.f360-theme-switching *,
+  html.f360-theme-switching *::before,
+  html.f360-theme-switching *::after {
+    transition: none !important;
+  }
+
+  /* Hide Edge/Windows native password reveal icon so only our custom toggle renders */
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
+  }
+
+  ::selection {
+    background-color: var(--accent);
+    color: var(--btn-primary-text);
+  }
+}
+
+/* Editorial strand draw-in fallback keyframes */
+@keyframes f360-strand-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.f360-strand-reveal {
+  animation: f360-strand-fade-in 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .f360-strand-reveal {
+    animation: none;
+    opacity: 1;
+  }
+}
