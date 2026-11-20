@@ -19,7 +19,7 @@ export function UnderlineTabs<T extends string>({
   return (
     <div
       role="tablist"
-      className={`flex items-center gap-7 border-b border-[var(--border-subtle)] overflow-x-auto ${className}`}
+      className={`flex items-center gap-7 border-b border-[var(--border-subtle)] overflow-x-auto overflow-y-hidden ${className}`}
     >
       {items.map((item) => {
         const isActive = item.key === activeKey;
@@ -38,7 +38,7 @@ export function UnderlineTabs<T extends string>({
           >
             {item.label}
             {isActive && (
-              <span className="absolute inset-x-0 -bottom-px h-[1.5px] bg-[var(--text-primary)]" />
+              <span className="absolute inset-x-0 bottom-0 h-[1.5px] bg-[var(--text-primary)]" />
             )}
           </button>
         );

@@ -191,9 +191,17 @@ export const WorkspaceLayout: React.FC = () => {
               aria-expanded={userMenuOpen}
               className="flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2 hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer"
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-secondary)] font-serif text-sm text-[var(--text-primary)]">
-                {initials}
-              </span>
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt={user.full_name}
+                  className="h-8 w-8 rounded-full border border-[var(--border-medium)] object-cover"
+                />
+              ) : (
+                <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--bg-secondary)] font-serif text-sm text-[var(--text-primary)]">
+                  {initials}
+                </span>
+              )}
               <ChevronDown className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
             </button>
 

@@ -90,10 +90,18 @@ export const OverviewPage: React.FC = () => {
 
         {/* Editorial 3-column layout matching Image 1 & 2 */}
         <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-12">
-          {/* Left vertical strand artwork panel */}
+          {/* Left profile visual card: uploaded photo replaces the card strand animation; removing restores it */}
           <div className="hidden lg:block lg:col-span-3">
             <div className="relative h-[340px] w-full overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
-              <StrandCanvas variant="dashboard-card" className="h-full w-full" />
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt={`${user.full_name} profile portrait`}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <StrandCanvas variant="dashboard-card" className="h-full w-full" />
+              )}
             </div>
           </div>
 
