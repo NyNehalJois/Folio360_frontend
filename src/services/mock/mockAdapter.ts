@@ -1,6 +1,9 @@
+import { sortEducationTimeline } from '@/features/education/educationHelpers';
 import { ApiClientError, registerMockHandler, tokenStore, type RequestOptions } from '@/services/http';
 import type {
   CurrentUser,
+  Education,
+  EducationCreate,
   Paginated,
   Preferences,
   Profile,
@@ -33,6 +36,9 @@ interface MockAccountRecord {
 
 const MOCK_SESSION_FLAG_KEY = 'f360_mock_session';
 const MOCK_ACCOUNTS_KEY = 'f360_mock_accounts';
+const MOCK_PROFILES_KEY = 'f360_mock_profiles';
+const MOCK_VISIBILITIES_KEY = 'f360_mock_visibilities';
+const MOCK_EDUCATIONS_KEY = 'f360_mock_educations';
 
 function readMockSessionFlag(): string | null {
   try {
@@ -88,10 +94,161 @@ function saveMockAccounts(map: Map<string, MockAccountRecord>): void {
 
 const mockAccounts = loadMockAccounts();
 
+function loadMockProfiles(): Map<string, Profile> {
+  const map = new Map<string, Profile>([[MOCK_USER.id, structuredClone(MOCK_PROFILE)]]);
+  try {
+    const raw = sessionStorage.getItem(MOCK_PROFILES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as [string, Profile][];
+      for (const [k, v] of parsed) {
+        map.set(k, v);
+      }
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  return map;
+}
+
+function saveMockProfiles(map: Map<string, Profile>): void {
+  try {
+    sessionStorage.setItem(MOCK_PROFILES_KEY, JSON.stringify(Array.from(map.entries())));
+  } catch {
+    // Ignore storage quota/write errors
+  }
+}
+
+function loadMockVisibilities(): Map<string, PublicSettings> {
+  const map = new Map<string, PublicSettings>([
+    [MOCK_USER.id, structuredClone(MOCK_VISIBILITY)],
+  ]);
+  try {
+    const raw = sessionStorage.getItem(MOCK_VISIBILITIES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as [string, PublicSettings][];
+      for (const [k, v] of parsed) {
+        map.set(k, v);
+      }
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  return map;
+}
+
+function saveMockVisibilities(map: Map<string, PublicSettings>): void {
+  try {
+    sessionStorage.setItem(MOCK_VISIBILITIES_KEY, JSON.stringify(Array.from(map.entries())));
+  } catch {
+    // Ignore storage write errors
+  }
+}
+
+function loadMockEducations(): Map<string, Education[]> {
+  const map = new Map<string, Education[]>([[MOCK_USER.id, structuredClone(MOCK_EDUCATION)]]);
+  try {
+    const raw = sessionStorage.getItem(MOCK_EDUCATIONS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as [string, Education[]][];
+      for (const [k, v] of parsed) {
+        map.set(k, v);
+      }
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  return map;
+}
+
+function saveMockEducations(map: Map<string, Education[]>): void {
+  try {
+    sessionStorage.setItem(MOCK_EDUCATIONS_KEY, JSON.stringify(Array.from(map.entries())));
+  } catch {
+    // Ignore storage write errors
+  }
+}
+
+const mockProfiles = loadMockProfiles();
+const mockVisibilities = loadMockVisibilities();
+const mockEducations = loadMockEducations();
+
+function getOrCreateEducations(userId: string): Education[] {
+  const existing = mockEducations.get(userId);
+  if (existing) return existing;
+  const fresh: Education[] = [];
+  mockEducations.set(userId, fresh);
+  saveMockEducations(mockEducations);
+  return fresh;
+}
+
+function getOrCreateProfile(user: CurrentUser): Profile {
+  const existing = mockProfiles.get(user.id);
+  if (existing) {
+    return {
+      ...existing,
+      slug: user.slug,
+      public_url: user.slug ? `https://folio360.in/@${user.slug}` : '',
+      avatar_url: user.avatar_url,
+    };
+  }
+  const fresh: Profile = {
+    user_id: user.id,
+    slug: user.slug,
+    public_url: user.slug ? `https://folio360.in/@${user.slug}` : '',
+    full_name: user.full_name,
+    headline: null,
+    bio: null,
+    avatar_url: user.avatar_url,
+    location: null,
+    contact_email: null,
+    phone: null,
+    website: null,
+    links: { other: [] },
+    interests: [],
+    updated_at: new Date().toISOString(),
+  };
+  mockProfiles.set(user.id, fresh);
+  saveMockProfiles(mockProfiles);
+  return fresh;
+}
+
+function getOrCreateVisibility(userId: string): PublicSettings {
+  const existing = mockVisibilities.get(userId);
+  if (existing) return existing;
+  const fresh: PublicSettings = {
+    public_enabled: false,
+    discoverable: false,
+    public_sections: {
+      education: true,
+      projects: true,
+      skills: true,
+      certificates: true,
+      experience: true,
+      achievements: true,
+      academics_cgpa: false,
+    },
+    public_contact: {
+      show_email: false,
+      show_phone: false,
+      show_location: false,
+    },
+  };
+  mockVisibilities.set(userId, fresh);
+  saveMockVisibilities(mockVisibilities);
+  return fresh;
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('Failed to read image file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 let activeMockEmail: string | null = readMockSessionFlag();
-let mockProfile: Profile = structuredClone(MOCK_PROFILE);
 let mockPreferences: Preferences = structuredClone(MOCK_PREFERENCES);
-let mockVisibility: PublicSettings = structuredClone(MOCK_VISIBILITY);
 
 function delay(ms = 140): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -380,16 +537,84 @@ async function handleMockRequest(
 
   // --- Profile & Preferences ---
   if (method === 'GET' && path === '/profile/me') {
-    return mockProfile;
+    const acct = requireMockAuth(options);
+    return getOrCreateProfile(acct.user);
   }
 
   if (method === 'PATCH' && path === '/profile/me') {
-    mockProfile = {
-      ...mockProfile,
-      ...(options.body as ProfileUpdate),
+    const acct = requireMockAuth(options);
+    const current = getOrCreateProfile(acct.user);
+    const patch = options.body as ProfileUpdate;
+    const updated: Profile = {
+      ...current,
+      ...patch,
+      links: patch.links
+        ? {
+            linkedin: patch.links.linkedin,
+            github: patch.links.github,
+            other: patch.links.other ?? current.links.other,
+          }
+        : current.links,
       updated_at: new Date().toISOString(),
     };
-    return mockProfile;
+    mockProfiles.set(acct.user.id, updated);
+    saveMockProfiles(mockProfiles);
+    if (patch.full_name && patch.full_name !== acct.user.full_name) {
+      acct.user = { ...acct.user, full_name: patch.full_name };
+      saveMockAccounts(mockAccounts);
+    }
+    return updated;
+  }
+
+  if (method === 'POST' && path === '/profile/me/avatar') {
+    const acct = requireMockAuth(options);
+    const formData = options.body;
+    if (!(formData instanceof FormData)) {
+      throw new ApiClientError(400, 'BAD_REQUEST', 'Expected multipart/form-data upload.');
+    }
+    const file = formData.get('file');
+    if (!(file instanceof File)) {
+      throw new ApiClientError(422, 'VALIDATION_ERROR', 'Avatar image file is required.');
+    }
+    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    if (!allowedTypes.has(file.type)) {
+      throw new ApiClientError(
+        415,
+        'UNSUPPORTED_FILE_TYPE',
+        'Unsupported image format. Use JPEG, PNG, or WebP.',
+      );
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new ApiClientError(413, 'FILE_TOO_LARGE', 'Image exceeds the 5 MB maximum limit.');
+    }
+
+    const avatarUrl = await fileToDataUrl(file);
+    acct.user = { ...acct.user, avatar_url: avatarUrl };
+    saveMockAccounts(mockAccounts);
+    const current = getOrCreateProfile(acct.user);
+    const updated: Profile = {
+      ...current,
+      avatar_url: avatarUrl,
+      updated_at: new Date().toISOString(),
+    };
+    mockProfiles.set(acct.user.id, updated);
+    saveMockProfiles(mockProfiles);
+    return { avatar_url: avatarUrl };
+  }
+
+  if (method === 'DELETE' && path === '/profile/me/avatar') {
+    const acct = requireMockAuth(options);
+    acct.user = { ...acct.user, avatar_url: null };
+    saveMockAccounts(mockAccounts);
+    const current = getOrCreateProfile(acct.user);
+    const updated: Profile = {
+      ...current,
+      avatar_url: null,
+      updated_at: new Date().toISOString(),
+    };
+    mockProfiles.set(acct.user.id, updated);
+    saveMockProfiles(mockProfiles);
+    return undefined;
   }
 
   if (method === 'GET' && path === '/profile/me/completeness') {
@@ -406,12 +631,27 @@ async function handleMockRequest(
   }
 
   if (method === 'GET' && path === '/profile/me/visibility') {
-    return mockVisibility;
+    const acct = requireMockAuth(options);
+    return getOrCreateVisibility(acct.user.id);
   }
 
   if (method === 'PATCH' && path === '/profile/me/visibility') {
-    mockVisibility = { ...mockVisibility, ...(options.body as Partial<PublicSettings>) };
-    return mockVisibility;
+    const acct = requireMockAuth(options);
+    const current = getOrCreateVisibility(acct.user.id);
+    const patch = options.body as Partial<PublicSettings>;
+    const updated: PublicSettings = {
+      ...current,
+      ...patch,
+      public_sections: patch.public_sections
+        ? { ...current.public_sections, ...patch.public_sections }
+        : current.public_sections,
+      public_contact: patch.public_contact
+        ? { ...current.public_contact, ...patch.public_contact }
+        : current.public_contact,
+    };
+    mockVisibilities.set(acct.user.id, updated);
+    saveMockVisibilities(mockVisibilities);
+    return updated;
   }
 
   if (method === 'GET' && path === '/profile/slug-availability') {
@@ -469,17 +709,167 @@ async function handleMockRequest(
     }
     acct.user = { ...acct.user, slug };
     saveMockAccounts(mockAccounts);
-    mockProfile = {
-      ...mockProfile,
+    const current = getOrCreateProfile(acct.user);
+    const updated: Profile = {
+      ...current,
       slug,
       public_url: `https://folio360.in/@${slug}`,
       updated_at: new Date().toISOString(),
     };
-    return mockProfile;
+    mockProfiles.set(acct.user.id, updated);
+    saveMockProfiles(mockProfiles);
+    return updated;
+  }
+
+  // --- Education ---
+  if (path === '/education') {
+    const acct = requireMockAuth(options);
+    const items = getOrCreateEducations(acct.user.id);
+    if (method === 'GET') {
+      return paginate(sortEducationTimeline(items), options);
+    }
+    if (method === 'POST') {
+      const body = (options.body ?? {}) as Partial<EducationCreate>;
+      const startYear = Number(body.start_year);
+      const startMonth = body.start_month ?? null;
+      const isCurrent = Boolean(body.is_current);
+      const endYear = isCurrent ? null : body.end_year ?? null;
+      const endMonth = isCurrent ? null : body.end_month ?? null;
+
+      if (!body.institution?.trim() || !body.degree?.trim() || !Number.isInteger(startYear)) {
+        throw new ApiClientError(
+          422,
+          'VALIDATION_ERROR',
+          'Institution, degree, and valid start year are required.',
+        );
+      }
+      if (!isCurrent && endYear != null) {
+        if (
+          endYear < startYear ||
+          (endYear === startYear && (endMonth ?? 12) < (startMonth ?? 1))
+        ) {
+          throw new ApiClientError(422, 'VALIDATION_ERROR', 'End date cannot precede start date.');
+        }
+      }
+
+      const now = new Date().toISOString();
+      const created: Education = {
+        id:
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `ed-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+        institution: body.institution.trim(),
+        university_or_board: body.university_or_board?.trim() || null,
+        education_level: body.education_level ?? 'undergraduate',
+        degree: body.degree.trim(),
+        programme: body.programme ?? undefined,
+        branch: body.branch?.trim() || undefined,
+        specialization: body.specialization?.trim() || undefined,
+        country: body.country?.trim() || null,
+        state: body.state?.trim() || null,
+        start_month: startMonth,
+        start_year: startYear,
+        end_month: endMonth,
+        end_year: endYear,
+        is_current: isCurrent,
+        description: body.description?.trim() || null,
+        scheme_id: body.scheme_id ?? null,
+        result_type: body.result_type ?? 'none',
+        result_value: body.result_value ?? null,
+        result_source: 'manual',
+        computed_cgpa: null,
+        show_result_publicly: Boolean(body.show_result_publicly),
+        achievements: body.achievements ?? [],
+        documents: [],
+        visibility: body.visibility ?? 'public',
+        created_at: now,
+        updated_at: now,
+      };
+      const updatedList = [created, ...items];
+      mockEducations.set(acct.user.id, updatedList);
+      saveMockEducations(mockEducations);
+      return created;
+    }
+  }
+
+  if (path.startsWith('/education/')) {
+    const acct = requireMockAuth(options);
+    const eduId = decodeURIComponent(path.replace('/education/', ''));
+    const items = getOrCreateEducations(acct.user.id);
+    const index = items.findIndex((item) => item.id === eduId);
+    if (index === -1) {
+      throw new ApiClientError(404, 'NOT_FOUND', 'Education record not found.');
+    }
+    if (method === 'GET') {
+      return items[index];
+    }
+    if (method === 'PATCH') {
+      const body = (options.body ?? {}) as Partial<EducationCreate>;
+      const existing = items[index];
+      const nextCurrent = body.is_current ?? existing.is_current;
+      const nextStartYear = body.start_year ?? existing.start_year;
+      const nextStartMonth = body.start_month !== undefined ? body.start_month : existing.start_month;
+      const nextEndYear = nextCurrent
+        ? null
+        : body.end_year !== undefined
+          ? body.end_year
+          : existing.end_year;
+      const nextEndMonth = nextCurrent
+        ? null
+        : body.end_month !== undefined
+          ? body.end_month
+          : existing.end_month;
+
+      if (!nextCurrent && nextEndYear != null) {
+        if (
+          nextEndYear < nextStartYear ||
+          (nextEndYear === nextStartYear && (nextEndMonth ?? 12) < (nextStartMonth ?? 1))
+        ) {
+          throw new ApiClientError(422, 'VALIDATION_ERROR', 'End date cannot precede start date.');
+        }
+      }
+
+      const updated: Education = {
+        ...existing,
+        ...body,
+        institution: body.institution !== undefined ? body.institution.trim() : existing.institution,
+        university_or_board:
+          body.university_or_board !== undefined
+            ? body.university_or_board?.trim() || null
+            : existing.university_or_board,
+        degree: body.degree !== undefined ? body.degree.trim() : existing.degree,
+        branch: body.branch !== undefined ? body.branch?.trim() || undefined : existing.branch,
+        specialization:
+          body.specialization !== undefined
+            ? body.specialization?.trim() || undefined
+            : existing.specialization,
+        country: body.country !== undefined ? body.country?.trim() || null : existing.country,
+        state: body.state !== undefined ? body.state?.trim() || null : existing.state,
+        description:
+          body.description !== undefined
+            ? body.description?.trim() || null
+            : existing.description,
+        is_current: nextCurrent,
+        start_month: nextStartMonth,
+        start_year: nextStartYear,
+        end_month: nextEndMonth,
+        end_year: nextEndYear,
+        updated_at: new Date().toISOString(),
+      };
+      const nextList = items.map((item) => (item.id === eduId ? updated : item));
+      mockEducations.set(acct.user.id, nextList);
+      saveMockEducations(mockEducations);
+      return updated;
+    }
+    if (method === 'DELETE') {
+      const nextList = items.filter((item) => item.id !== eduId);
+      mockEducations.set(acct.user.id, nextList);
+      saveMockEducations(mockEducations);
+      return undefined;
+    }
   }
 
   // --- Portfolio Collections ---
-  if (method === 'GET' && path === '/education') return paginate(MOCK_EDUCATION, options);
   if (method === 'GET' && path === '/projects') return paginate(MOCK_PROJECTS, options);
   if (method === 'GET' && path === '/skills/me') return paginate(MOCK_SKILLS, options);
   if (method === 'GET' && path === '/certificates') return paginate(MOCK_CERTIFICATES, options);
@@ -490,26 +880,91 @@ async function handleMockRequest(
 
   // --- Public Profiles ---
   if (method === 'GET' && path === '/public/profiles/explore') {
-    return paginate(
-      [
-        {
-          slug: MOCK_PUBLIC_PROFILE.slug,
-          full_name: MOCK_PUBLIC_PROFILE.full_name,
-          headline: MOCK_PUBLIC_PROFILE.headline,
-          avatar_url: MOCK_PUBLIC_PROFILE.avatar_url,
-          top_skills: MOCK_SKILLS.map((s) => s.skill.name),
-        },
-      ],
-      options,
-    );
+    const discoverableCards = [];
+    for (const acct of mockAccounts.values()) {
+      if (!acct.user.slug) continue;
+      const vis = getOrCreateVisibility(acct.user.id);
+      if (!vis.public_enabled || !vis.discoverable) continue;
+      const prof = getOrCreateProfile(acct.user);
+      discoverableCards.push({
+        slug: prof.slug,
+        full_name: prof.full_name,
+        headline: prof.headline,
+        avatar_url: prof.avatar_url,
+        top_skills: MOCK_SKILLS.map((s) => s.skill.name),
+      });
+    }
+    return paginate(discoverableCards, options);
   }
 
   if (method === 'GET' && path.startsWith('/public/profiles/')) {
-    const slug = decodeURIComponent(path.replace('/public/profiles/', ''));
-    if (slug !== MOCK_PUBLIC_PROFILE.slug) {
+    const rawSlug = decodeURIComponent(path.replace('/public/profiles/', ''));
+    const slug = rawSlug.startsWith('@') ? rawSlug.slice(1) : rawSlug;
+    let targetAccount: MockAccountRecord | undefined;
+    for (const acct of mockAccounts.values()) {
+      if (acct.user.slug === slug) {
+        targetAccount = acct;
+        break;
+      }
+    }
+    if (!targetAccount) {
       throw new ApiClientError(404, 'NOT_FOUND', 'Public profile not found.');
     }
-    return MOCK_PUBLIC_PROFILE;
+    const vis = getOrCreateVisibility(targetAccount.user.id);
+    if (!vis.public_enabled) {
+      throw new ApiClientError(404, 'NOT_FOUND', 'Public profile is disabled.');
+    }
+    const prof = getOrCreateProfile(targetAccount.user);
+    const userEducations = getOrCreateEducations(targetAccount.user.id);
+    const publicEducations = sortEducationTimeline(
+      userEducations.filter((item) => item.visibility === 'public'),
+    ).map((e) => ({
+      institution: e.institution,
+      university_or_board: e.university_or_board,
+      education_level: e.education_level,
+      degree: e.degree,
+      programme: e.programme,
+      branch: e.branch,
+      specialization: e.specialization,
+      country: e.country,
+      state: e.state,
+      start_month: e.start_month,
+      start_year: e.start_year,
+      end_month: e.end_month ?? null,
+      end_year: e.end_year ?? null,
+      is_current: e.is_current,
+      description: e.description,
+      result: e.show_result_publicly ? (e.result_value ?? e.computed_cgpa) : undefined,
+      achievements: e.achievements,
+    }));
+    return {
+      slug: prof.slug,
+      full_name: prof.full_name,
+      headline: prof.headline,
+      bio: prof.bio,
+      avatar_url: prof.avatar_url,
+      location: vis.public_contact.show_location ? prof.location ?? undefined : undefined,
+      contact_email: vis.public_contact.show_email ? prof.contact_email ?? undefined : undefined,
+      phone: vis.public_contact.show_phone ? prof.phone ?? undefined : undefined,
+      links: {
+        linkedin: prof.links.linkedin,
+        github: prof.links.github,
+        website: prof.website ?? undefined,
+        other: prof.links.other,
+      },
+      interests: prof.interests,
+      sections: {
+        education: vis.public_sections.education ? publicEducations : undefined,
+        projects: vis.public_sections.projects ? MOCK_PUBLIC_PROFILE.sections.projects : undefined,
+        skills: vis.public_sections.skills ? MOCK_PUBLIC_PROFILE.sections.skills : undefined,
+        certificates: vis.public_sections.certificates
+          ? MOCK_PUBLIC_PROFILE.sections.certificates
+          : undefined,
+        experience: vis.public_sections.experience
+          ? MOCK_PUBLIC_PROFILE.sections.experience
+          : undefined,
+      },
+    };
   }
 
   throw new ApiClientError(

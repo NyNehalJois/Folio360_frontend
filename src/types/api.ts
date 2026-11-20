@@ -263,15 +263,36 @@ export interface SlugAvailability {
 
 export type EducationResultType = 'cgpa' | 'percentage' | 'grade' | 'none';
 
+export type EducationLevel =
+  | 'school'
+  | 'pre_university'
+  | 'diploma'
+  | 'undergraduate'
+  | 'postgraduate'
+  | 'doctorate'
+  | 'other';
+
 export interface EducationCreate {
   institution: string;
+  /** Phase 2 backend dependency: separate university/board field in addition to affiliated institution */
+  university_or_board?: string | null;
+  /** Phase 2 backend dependency: education level classification */
+  education_level?: EducationLevel;
   degree: string;
   programme?: string;
   branch?: string;
   specialization?: string;
+  /** Phase 2 backend dependency: geographic fields */
+  country?: string | null;
+  state?: string | null;
+  /** Phase 2 backend dependency: month-precision academic dates (1-12) */
+  start_month?: number | null;
   start_year: number;
+  end_month?: number | null;
   end_year?: number | null;
   is_current: boolean;
+  /** Phase 2 backend dependency: optional qualification summary */
+  description?: string | null;
   scheme_id?: UUID | null;
   result_type: EducationResultType;
   result_value?: string | null;
@@ -892,11 +913,20 @@ export interface PublicProfile {
   sections: {
     education?: {
       institution: string;
+      university_or_board?: string | null;
+      education_level?: EducationLevel;
       degree: string;
       programme?: string;
       branch?: string;
+      specialization?: string;
+      country?: string | null;
+      state?: string | null;
+      start_month?: number | null;
       start_year: number;
+      end_month?: number | null;
       end_year: number | null;
+      is_current?: boolean;
+      description?: string | null;
       result?: string;
       achievements: string[];
     }[];
