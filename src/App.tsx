@@ -14,14 +14,16 @@ import {
   VerificationSuccessPage,
   VerifyEmailPage,
 } from '@/features/auth/VerifyEmailPages';
+import { EducationPage } from '@/features/education/EducationPage';
 import { HomePage } from '@/features/home/HomePage';
 import { OverviewPage } from '@/features/overview/OverviewPage';
+import { ProfilePage } from '@/features/profile/ProfilePage';
+import { PublicProfilePage } from '@/features/profile/PublicProfilePage';
 import { ModuleScaffoldPage } from '@/features/workspace/ModuleScaffoldPage';
 import { WorkspaceLayout } from '@/layouts/WorkspaceLayout';
 import {
   certificatesService,
   documentsService,
-  educationService,
   experienceService,
   projectsService,
   resumesService,
@@ -63,39 +65,8 @@ export const App: React.FC = () => {
               }
             >
               <Route index element={<OverviewPage />} />
-              <Route
-                path="profile"
-                element={
-                  <ModuleScaffoldPage
-                    sectionCode="MODULE 02 — PROFILE"
-                    title="Personal Profile"
-                    description="Manage your public slug, headline, biography, avatar, and social links."
-                    contractEndpoints={[
-                      'GET /api/v1/profile/me',
-                      'PATCH /api/v1/profile/me',
-                      'POST /api/v1/profile/me/avatar',
-                      'GET /api/v1/profile/slug-availability',
-                    ]}
-                  />
-                }
-              />
-              <Route
-                path="education"
-                element={
-                  <ModuleScaffoldPage
-                    sectionCode="MODULE 03 & 04 — EDUCATION & VTU ACADEMICS"
-                    title="Academic Journey"
-                    description="Maintain qualifications, VTU 2022 CSE semester records, grade calculator, and CGPA trends."
-                    contractEndpoints={[
-                      'GET /api/v1/education',
-                      'GET /api/v1/academics/curriculum',
-                      'GET /api/v1/academics/records',
-                      'POST /api/v1/academics/calculate/sgpa',
-                    ]}
-                    loadCount={async () => (await educationService.list()).total}
-                  />
-                }
-              />
+              <Route path="profile" element={<ProfilePage />} />
+              <Route path="education" element={<EducationPage />} />
               <Route
                 path="projects"
                 element={
@@ -231,6 +202,8 @@ export const App: React.FC = () => {
               />
             </Route>
 
+            <Route path="/u/:slug" element={<PublicProfilePage />} />
+            <Route path="/:handle" element={<PublicProfilePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
