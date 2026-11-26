@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const token = await httpClient.tryRestoreSession();
         if (token && active) {
           const me = await authService.me();
-          if (active && me.email_verified) {
+          if (active && (me.email_verified ?? me.is_email_verified)) {
             setUser(me);
           } else if (active) {
             tokenStore.clear();
@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await authService.login({ email, password });
-    if (!res.user.email_verified) {
+    if (!(res.user.email_verified ?? res.user.is_email_verified)) {
       tokenStore.clear();
       setUser(null);
       throw new ApiClientError(
@@ -71,7 +71,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(
     async (fullName: string, email: string, password: string): Promise<RegisterOutcome> => {
       const res = await authService.register({ full_name: fullName, email, password });
-      const requiresVerification = !res.user.email_verified || !res.access_token;
+      const requiresVerification =
+        !(res.user.email_verified ?? res.user.is_email_verified) || !res.access_token;
 
       if (requiresVerification) {
         tokenStore.clear();
@@ -87,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const exchangeOAuth = useCallback(async (code: string, codeVerifier?: string) => {
     const res = await authService.exchangeOAuthCode({ code, code_verifier: codeVerifier });
-    if (!res.user.email_verified) {
+    if (!(res.user.email_verified ?? res.user.is_email_verified)) {
       tokenStore.clear();
       setUser(null);
       throw new ApiClientError(

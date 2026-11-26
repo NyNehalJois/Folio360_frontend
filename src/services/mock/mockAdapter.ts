@@ -902,7 +902,7 @@ async function handleMockRequest(
           ? body.end_month
           : existing.end_month;
 
-      if (!nextCurrent && nextEndYear != null) {
+      if (!nextCurrent && nextEndYear != null && nextStartYear != null) {
         if (
           nextEndYear < nextStartYear ||
           (nextEndYear === nextStartYear && (nextEndMonth ?? 12) < (nextStartMonth ?? 1))

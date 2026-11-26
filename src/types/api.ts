@@ -46,6 +46,9 @@ export type ApiErrorCode =
   | 'FILE_TOO_LARGE'
   | 'UNSUPPORTED_FILE_TYPE'
   | 'VALIDATION_ERROR'
+  | 'DOCUMENT_LINKING_NOT_ENABLED'
+  | 'EDUCATION_NOT_FOUND'
+  | 'INVALID_ACCESS_TOKEN'
   | 'INVALID_REFERENCE'
   | 'RATE_LIMITED'
   | 'INTERNAL_ERROR'
@@ -125,11 +128,14 @@ export interface CurrentUser {
   id: UUID;
   email: string;
   email_verified: boolean;
+  /** Live backend field name (normalized into email_verified by authService) */
+  is_email_verified?: boolean;
   full_name: string;
   slug: string;
   avatar_url: string | null;
   has_password: boolean;
   linked_providers: OAuthProvider[];
+  oauth_providers?: OAuthProvider[];
   /** Backend contract dependency: indicates whether first-time profile setup is completed */
   profile_completed?: boolean;
   created_at: Timestamp;
@@ -296,7 +302,15 @@ export interface SlugAvailability {
 
 /* --- 5.4 Education (/education) --- */
 
-export type EducationResultType = 'cgpa' | 'percentage' | 'grade' | 'none';
+export type EducationResultType =
+  | 'cgpa'
+  | 'gpa'
+  | 'percentage'
+  | 'grade'
+  | 'marks'
+  | 'pass_fail'
+  | 'other'
+  | 'none';
 
 export type EducationLevel =
   | 'school'
@@ -312,35 +326,38 @@ export interface EducationCreate {
   /** Phase 2 backend dependency: separate university/board field in addition to affiliated institution */
   university_or_board?: string | null;
   /** Phase 2 backend dependency: education level classification */
-  education_level?: EducationLevel;
+  education_level?: EducationLevel | null;
   degree: string;
-  programme?: string;
-  branch?: string;
-  specialization?: string;
+  programme?: string | null;
+  branch?: string | null;
+  specialization?: string | null;
   /** Phase 2 backend dependency: geographic fields */
   country?: string | null;
   state?: string | null;
   /** Phase 2 backend dependency: month-precision academic dates (1-12) */
   start_month?: number | null;
-  start_year: number;
+  start_year: number | null;
   end_month?: number | null;
   end_year?: number | null;
   is_current: boolean;
   /** Phase 2 backend dependency: optional qualification summary */
   description?: string | null;
-  scheme_id?: UUID | null;
-  result_type: EducationResultType;
+  scheme_id?: string | null;
+  result_type?: EducationResultType | null;
   result_value?: string | null;
   show_result_publicly: boolean;
   achievements: string[];
-  document_ids: UUID[];
+  document_ids?: UUID[];
   visibility: Visibility;
 }
 
-export interface Education extends Omit<EducationCreate, 'document_ids'> {
+export interface Education extends Omit<EducationCreate, 'document_ids' | 'result_type'> {
   id: UUID;
+  user_id?: UUID;
+  result_type: EducationResultType | null;
   result_source: 'manual' | 'computed';
   computed_cgpa: number | null;
+  document_ids?: UUID[];
   documents: DocumentRef[];
   created_at: Timestamp;
   updated_at: Timestamp;
@@ -951,15 +968,15 @@ export interface PublicProfile {
     education?: {
       institution: string;
       university_or_board?: string | null;
-      education_level?: EducationLevel;
+      education_level?: EducationLevel | null;
       degree: string;
-      programme?: string;
-      branch?: string;
-      specialization?: string;
+      programme?: string | null;
+      branch?: string | null;
+      specialization?: string | null;
       country?: string | null;
       state?: string | null;
       start_month?: number | null;
-      start_year: number;
+      start_year: number | null;
       end_month?: number | null;
       end_year: number | null;
       is_current?: boolean;

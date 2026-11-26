@@ -25,7 +25,7 @@ export const MONTH_OPTIONS: { value: number; label: string; short: string }[] = 
   { value: 12, label: 'December', short: 'Dec' },
 ];
 
-export function getEducationLevelLabel(level?: EducationLevel): string {
+export function getEducationLevelLabel(level?: EducationLevel | null): string {
   const match = EDUCATION_LEVEL_OPTIONS.find((item) => item.value === level);
   return match ? match.label : 'Qualification';
 }
@@ -39,23 +39,26 @@ export function formatMonthYear(month?: number | null, year?: number | null): st
 
 export function formatEducationPeriod(item: {
   start_month?: number | null;
-  start_year: number;
+  start_year?: number | null;
   end_month?: number | null;
   end_year?: number | null;
   is_current?: boolean;
 }): string {
   const start = formatMonthYear(item.start_month, item.start_year);
   if (item.is_current) {
-    return `${start} – Present`;
+    return start ? `${start} – Present` : 'Present';
   }
   const end = formatMonthYear(item.end_month, item.end_year);
-  return end ? `${start} – ${end}` : start;
+  if (start && end) return `${start} – ${end}`;
+  if (start) return start;
+  if (end) return end;
+  return 'Dates not specified';
 }
 
 export function sortEducationTimeline<
   T extends {
     is_current?: boolean;
-    start_year: number;
+    start_year?: number | null;
     start_month?: number | null;
     end_year?: number | null;
     end_month?: number | null;
@@ -66,17 +69,20 @@ export function sortEducationTimeline<
     const bCurr = Boolean(b.is_current);
     if (aCurr !== bCurr) return aCurr ? -1 : 1;
 
+    const aStartYear = a.start_year ?? 0;
+    const bStartYear = b.start_year ?? 0;
+
     if (!aCurr && !bCurr) {
-      const aEndYear = a.end_year ?? a.start_year;
-      const bEndYear = b.end_year ?? b.start_year;
+      const aEndYear = a.end_year ?? aStartYear;
+      const bEndYear = b.end_year ?? bStartYear;
       if (aEndYear !== bEndYear) return bEndYear - aEndYear;
 
-      const aEndMonth = a.end_month ?? 0;
-      const bEndMonth = b.end_month ?? 0;
+      const aEndMonth = a.end_year != null ? (a.end_month ?? 0) : (a.start_month ?? 0);
+      const bEndMonth = b.end_year != null ? (b.end_month ?? 0) : (b.start_month ?? 0);
       if (aEndMonth !== bEndMonth) return bEndMonth - aEndMonth;
     }
 
-    if (a.start_year !== b.start_year) return b.start_year - a.start_year;
+    if (aStartYear !== bStartYear) return bStartYear - aStartYear;
     return (b.start_month ?? 0) - (a.start_month ?? 0);
   });
 }

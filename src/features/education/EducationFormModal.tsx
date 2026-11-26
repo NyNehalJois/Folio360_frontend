@@ -6,6 +6,7 @@ import {
   formatDocumentCategory,
   formatFileSize,
 } from '@/features/documents/DocumentUploadWidget';
+import { API_CONFIG } from '@/services/config';
 import { educationService } from '@/services/api/education.service';
 import type { Document, Education, EducationCreate, EducationLevel, Visibility } from '@/types/api';
 import {
@@ -23,7 +24,7 @@ interface EducationFormModalProps {
   availableDocuments: Document[];
   onDocumentUploaded: (doc: Document) => void;
   onClose: () => void;
-  onSaved: (record: Education, mode: 'create' | 'edit') => void;
+  onSaved: (record: Education, mode: 'create' | 'edit') => void | Promise<void>;
 }
 
 const INPUT_BASE_CLASS =
@@ -125,37 +126,99 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
       return;
     }
 
-    const payload: EducationCreate = {
-      institution: values.institution.trim(),
-      university_or_board: values.university_or_board.trim() || null,
-      education_level: values.education_level,
-      degree: values.degree.trim(),
-      branch: values.branch.trim(),
-      specialization: values.specialization.trim() || undefined,
-      country: values.country.trim(),
-      state: values.state.trim(),
-      start_month: Number(values.start_month),
-      start_year: Number(values.start_year),
-      end_month: values.is_current ? null : Number(values.end_month),
-      end_year: values.is_current ? null : Number(values.end_year),
-      is_current: values.is_current,
-      description: values.description.trim() || null,
-      visibility: values.visibility,
-      result_type: editingRecord?.result_type ?? 'none',
-      result_value: editingRecord?.result_value ?? null,
-      show_result_publicly: editingRecord?.show_result_publicly ?? false,
-      achievements: editingRecord?.achievements ?? [],
-      document_ids: selectedDocIds,
-    };
+    const nextInstitution = values.institution.trim();
+    const nextUniversity = values.university_or_board.trim() || null;
+    const nextLevel = values.education_level;
+    const nextDegree = values.degree.trim();
+    const nextBranch = values.branch.trim();
+    const nextSpecialization = values.specialization.trim() || null;
+    const nextCountry = values.country.trim();
+    const nextState = values.state.trim();
+    const nextStartMonth = Number(values.start_month);
+    const nextStartYear = Number(values.start_year);
+    const nextEndMonth = values.is_current ? null : Number(values.end_month);
+    const nextEndYear = values.is_current ? null : Number(values.end_year);
+    const nextIsCurrent = values.is_current;
+    const nextDescription = values.description.trim() || null;
+    const nextVisibility = values.visibility;
 
     setSaving(true);
     setSubmitError(null);
 
     try {
-      const saved = isEdit && editingRecord
-        ? await educationService.update(editingRecord.id, payload)
-        : await educationService.create(payload);
-      onSaved(saved, isEdit ? 'edit' : 'create');
+      let saved: Education;
+      if (isEdit && editingRecord) {
+        const patchPayload: Partial<EducationCreate> = {};
+        if (nextInstitution !== editingRecord.institution) patchPayload.institution = nextInstitution;
+        if (nextUniversity !== (editingRecord.university_or_board ?? null)) {
+          patchPayload.university_or_board = nextUniversity;
+        }
+        if (nextLevel !== (editingRecord.education_level ?? 'undergraduate')) {
+          patchPayload.education_level = nextLevel;
+        }
+        if (nextDegree !== editingRecord.degree) patchPayload.degree = nextDegree;
+        if (nextBranch !== (editingRecord.branch ?? '')) patchPayload.branch = nextBranch;
+        if (nextSpecialization !== (editingRecord.specialization ?? null)) {
+          patchPayload.specialization = nextSpecialization;
+        }
+        if (nextCountry !== (editingRecord.country ?? '')) patchPayload.country = nextCountry;
+        if (nextState !== (editingRecord.state ?? '')) patchPayload.state = nextState;
+        if (nextStartMonth !== (editingRecord.start_month ?? null)) {
+          patchPayload.start_month = nextStartMonth;
+        }
+        if (nextStartYear !== (editingRecord.start_year ?? null)) {
+          patchPayload.start_year = nextStartYear;
+        }
+        if (nextIsCurrent !== editingRecord.is_current) patchPayload.is_current = nextIsCurrent;
+        if (nextEndMonth !== (editingRecord.end_month ?? null)) patchPayload.end_month = nextEndMonth;
+        if (nextEndYear !== (editingRecord.end_year ?? null)) patchPayload.end_year = nextEndYear;
+        if (nextDescription !== (editingRecord.description ?? null)) {
+          patchPayload.description = nextDescription;
+        }
+        if (nextVisibility !== editingRecord.visibility) patchPayload.visibility = nextVisibility;
+
+        if (API_CONFIG.useMocks) {
+          const prevDocIds = editingRecord.documents?.map((doc) => doc.id) ?? [];
+          const docsChanged =
+            selectedDocIds.length !== prevDocIds.length ||
+            selectedDocIds.some((id, idx) => id !== prevDocIds[idx]);
+          if (docsChanged) {
+            patchPayload.document_ids = selectedDocIds;
+          }
+        }
+
+        if (Object.keys(patchPayload).length === 0) {
+          setSaving(false);
+          onClose();
+          return;
+        }
+        saved = await educationService.update(editingRecord.id, patchPayload);
+      } else {
+        const payload: EducationCreate = {
+          institution: nextInstitution,
+          university_or_board: nextUniversity,
+          education_level: nextLevel,
+          degree: nextDegree,
+          branch: nextBranch,
+          specialization: nextSpecialization,
+          country: nextCountry,
+          state: nextState,
+          start_month: nextStartMonth,
+          start_year: nextStartYear,
+          end_month: nextEndMonth,
+          end_year: nextEndYear,
+          is_current: nextIsCurrent,
+          description: nextDescription,
+          visibility: nextVisibility,
+          result_type: null,
+          result_value: null,
+          show_result_publicly: true,
+          achievements: [],
+          document_ids: API_CONFIG.useMocks ? selectedDocIds : [],
+        };
+        saved = await educationService.create(payload);
+      }
+      await onSaved(saved, isEdit ? 'edit' : 'create');
     } catch (err) {
       setSubmitError(
         err instanceof Error
@@ -548,67 +611,77 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
                     Academic Documents
                   </p>
                   <p className="text-xs text-[var(--text-secondary)]">
-                    Attach existing documents or upload new marksheets and certificates.
+                    {API_CONFIG.useMocks
+                      ? 'Attach existing documents or upload new marksheets and certificates.'
+                      : 'Document Vault coming soon — marksheet and certificate linking will be enabled in the next stage.'}
                   </p>
                 </div>
                 <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--text-secondary)]">
-                  {selectedDocIds.length} attached
+                  {API_CONFIG.useMocks ? `${selectedDocIds.length} attached` : 'Coming soon'}
                 </span>
               </div>
 
-              {availableDocuments.length > 0 && (
-                <div className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
-                  {availableDocuments.map((doc) => {
-                    const checked = selectedDocIds.includes(doc.id);
-                    return (
-                      <label
-                        key={doc.id}
-                        className={`flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs transition-colors ${
-                          checked
-                            ? 'border-[var(--border-accent)] bg-[var(--surface-elevated)]'
-                            : 'border-[var(--border-subtle)] bg-[var(--bg-main)] hover:border-[var(--border-medium)]'
-                        }`}
-                      >
-                        <span className="flex min-w-0 items-center gap-2.5">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() =>
-                              setSelectedDocIds((prev) =>
-                                prev.includes(doc.id)
-                                  ? prev.filter((id) => id !== doc.id)
-                                  : [...prev, doc.id],
-                              )
-                            }
-                            className="h-3.5 w-3.5 rounded border-[var(--border-medium)] accent-[var(--accent)]"
-                          />
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-                          <span className="truncate font-medium text-[var(--text-primary)]">
-                            {doc.title}
-                          </span>
-                        </span>
-                        <span className="shrink-0 font-mono text-[10px] text-[var(--text-secondary)]">
-                          {formatDocumentCategory(doc.category)} · {formatFileSize(doc.size_bytes)}
-                        </span>
-                      </label>
-                    );
-                  })}
+              {!API_CONFIG.useMocks ? (
+                <div className="rounded-md border border-dashed border-[var(--border-medium)] bg-[var(--bg-main)]/60 px-3.5 py-3 text-xs text-[var(--text-secondary)]">
+                  Document upload and attachment are temporarily disabled until Document Vault is connected.
                 </div>
-              )}
+              ) : (
+                <>
+                  {availableDocuments.length > 0 && (
+                    <div className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
+                      {availableDocuments.map((doc) => {
+                        const checked = selectedDocIds.includes(doc.id);
+                        return (
+                          <label
+                            key={doc.id}
+                            className={`flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs transition-colors ${
+                              checked
+                                ? 'border-[var(--border-accent)] bg-[var(--surface-elevated)]'
+                                : 'border-[var(--border-subtle)] bg-[var(--bg-main)] hover:border-[var(--border-medium)]'
+                            }`}
+                          >
+                            <span className="flex min-w-0 items-center gap-2.5">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() =>
+                                  setSelectedDocIds((prev) =>
+                                    prev.includes(doc.id)
+                                      ? prev.filter((id) => id !== doc.id)
+                                      : [...prev, doc.id],
+                                  )
+                                }
+                                className="h-3.5 w-3.5 rounded border-[var(--border-medium)] accent-[var(--accent)]"
+                              />
+                              <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
+                              <span className="truncate font-medium text-[var(--text-primary)]">
+                                {doc.title}
+                              </span>
+                            </span>
+                            <span className="shrink-0 font-mono text-[10px] text-[var(--text-secondary)]">
+                              {formatDocumentCategory(doc.category)} · {formatFileSize(doc.size_bytes)}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
 
-              <div className="border-t border-[var(--border-subtle)] pt-3">
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-2">
-                  Upload &amp; Attach New Document
-                </p>
-                <DocumentUploadWidget
-                  compact
-                  submitLabel="Upload & attach"
-                  onUploaded={(doc) => {
-                    onDocumentUploaded(doc);
-                    setSelectedDocIds((prev) => (prev.includes(doc.id) ? prev : [...prev, doc.id]));
-                  }}
-                />
-              </div>
+                  <div className="border-t border-[var(--border-subtle)] pt-3">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-2">
+                      Upload &amp; Attach New Document
+                    </p>
+                    <DocumentUploadWidget
+                      compact
+                      submitLabel="Upload & attach"
+                      onUploaded={(doc) => {
+                        onDocumentUploaded(doc);
+                        setSelectedDocIds((prev) => (prev.includes(doc.id) ? prev : [...prev, doc.id]));
+                      }}
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex flex-col gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/35 p-4 sm:flex-row sm:items-center sm:justify-between">

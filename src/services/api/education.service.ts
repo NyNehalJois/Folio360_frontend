@@ -1,3 +1,4 @@
+import { API_CONFIG } from '@/services/config';
 import { httpClient } from '@/services/http';
 import type {
   Education,
@@ -7,6 +8,27 @@ import type {
   UUID,
 } from '@/types/api';
 
+function sanitizeCreatePayload(payload: EducationCreate): EducationCreate {
+  if (API_CONFIG.useMocks) return payload;
+  return {
+    ...payload,
+    result_type: payload.result_type === 'none' ? null : payload.result_type ?? null,
+    document_ids: payload.document_ids ?? [],
+  };
+}
+
+function sanitizeUpdatePayload(payload: Partial<EducationCreate>): Partial<EducationCreate> {
+  if (API_CONFIG.useMocks) return payload;
+  const next: Partial<EducationCreate> = { ...payload };
+  if (next.result_type === 'none') {
+    next.result_type = null;
+  }
+  if (Array.isArray(next.document_ids) && next.document_ids.length === 0) {
+    delete next.document_ids;
+  }
+  return next;
+}
+
 export const educationService = {
   list(params?: PaginationParams): Promise<Paginated<Education>> {
     return httpClient.get<Paginated<Education>>('/education', {
@@ -15,7 +37,7 @@ export const educationService = {
   },
 
   create(payload: EducationCreate): Promise<Education> {
-    return httpClient.post<Education>('/education', payload);
+    return httpClient.post<Education>('/education', sanitizeCreatePayload(payload));
   },
 
   get(educationId: UUID): Promise<Education> {
@@ -23,7 +45,10 @@ export const educationService = {
   },
 
   update(educationId: UUID, payload: Partial<EducationCreate>): Promise<Education> {
-    return httpClient.patch<Education>(`/education/${educationId}`, payload);
+    return httpClient.patch<Education>(
+      `/education/${educationId}`,
+      sanitizeUpdatePayload(payload),
+    );
   },
 
   remove(educationId: UUID): Promise<void> {

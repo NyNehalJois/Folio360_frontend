@@ -29,6 +29,7 @@ import {
   formatDocumentCategory,
   formatFileSize,
 } from '@/features/documents/DocumentUploadWidget';
+import { API_CONFIG } from '@/services/config';
 import type { ApiClientError } from '@/services/http';
 import { documentsService, educationService } from '@/services/api';
 import type { Document, DocumentCategory, Education } from '@/types/api';
@@ -91,17 +92,27 @@ export const EducationPage: React.FC = () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const [eduRes, docsRes] = await Promise.all([
-        educationService.list({ page: 1, page_size: 100 }),
-        documentsService.list({ page: 1, page_size: 100 }),
-      ]);
-      const sorted = sortEducationTimeline(eduRes.items);
-      setRecords(sorted);
-      setDocuments(docsRes.items);
-      setExpandedIds((prev) => {
-        if (Object.keys(prev).length > 0 || sorted.length === 0) return prev;
-        return { [sorted[0].id]: true };
-      });
+      if (API_CONFIG.useMocks) {
+        const [eduRes, docsRes] = await Promise.all([
+          educationService.list({ page: 1, page_size: 100 }),
+          documentsService.list({ page: 1, page_size: 100 }),
+        ]);
+        const sorted = sortEducationTimeline(eduRes.items);
+        setRecords(sorted);
+        setDocuments(docsRes.items);
+        setExpandedIds((prev) => {
+          if (Object.keys(prev).length > 0 || sorted.length === 0) return prev;
+          return { [sorted[0].id]: true };
+        });
+      } else {
+        const eduRes = await educationService.list({ page: 1, page_size: 100 });
+        setRecords(eduRes.items);
+        setDocuments([]);
+        setExpandedIds((prev) => {
+          if (Object.keys(prev).length > 0 || eduRes.items.length === 0) return prev;
+          return { [eduRes.items[0].id]: true };
+        });
+      }
     } catch (err) {
       setLoadError(err as ApiClientError | Error);
     } finally {
@@ -113,7 +124,10 @@ export const EducationPage: React.FC = () => {
     void loadAll();
   }, [loadAll]);
 
-  const sortedRecords = useMemo(() => sortEducationTimeline(records), [records]);
+  const sortedRecords = useMemo(
+    () => (API_CONFIG.useMocks ? sortEducationTimeline(records) : records),
+    [records],
+  );
   const currentRecords = useMemo(
     () => sortedRecords.filter((item) => item.is_current),
     [sortedRecords],
@@ -162,18 +176,32 @@ export const EducationPage: React.FC = () => {
     setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handleSaved = (saved: Education, mode: 'create' | 'edit') => {
-    setRecords((prev) => {
-      const next =
-        mode === 'edit'
-          ? prev.map((item) => (item.id === saved.id ? saved : item))
-          : [saved, ...prev];
-      return sortEducationTimeline(next);
-    });
-    setExpandedIds((prev) => ({ ...prev, [saved.id]: true }));
+  const handleSaved = async (saved: Education, mode: 'create' | 'edit') => {
     setModalOpen(false);
     setEditingRecord(null);
     setConfirmDeleteId(null);
+    setExpandedIds((prev) => ({ ...prev, [saved.id]: true }));
+
+    if (API_CONFIG.useMocks) {
+      setRecords((prev) => {
+        const next =
+          mode === 'edit'
+            ? prev.map((item) => (item.id === saved.id ? saved : item))
+            : [saved, ...prev];
+        return sortEducationTimeline(next);
+      });
+    } else {
+      try {
+        const refreshed = await educationService.list({ page: 1, page_size: 100 });
+        setRecords(refreshed.items);
+      } catch {
+        setRecords((prev) =>
+          mode === 'edit'
+            ? prev.map((item) => (item.id === saved.id ? saved : item))
+            : [saved, ...prev],
+        );
+      }
+    }
     setActionBanner({
       tone: 'success',
       message:
@@ -707,14 +735,31 @@ export const EducationPage: React.FC = () => {
             <PillButton
               variant="primary"
               size="md"
+              disabled={!API_CONFIG.useMocks}
+              title={!API_CONFIG.useMocks ? 'Document Vault coming soon' : undefined}
               onClick={() => setUploadPanelOpen((prev) => !prev)}
             >
               <Upload className="h-3.5 w-3.5" />
-              {uploadPanelOpen ? 'Close Upload' : 'Upload Document'}
+              {!API_CONFIG.useMocks
+                ? 'Document Vault Coming Soon'
+                : uploadPanelOpen
+                  ? 'Close Upload'
+                  : 'Upload Document'}
             </PillButton>
           </div>
         </div>
 
+        {!API_CONFIG.useMocks ? (
+          <div className="rounded-xl border border-dashed border-[var(--border-medium)] bg-[var(--bg-main)]/60 px-6 py-8 text-center">
+            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+              Document Vault coming soon
+            </p>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Marksheet uploads, certificate attachments, and AI document processing will be enabled in the upcoming Document Vault stage.
+            </p>
+          </div>
+        ) : (
+          <>
         {/* Toggleable Upload Drawer */}
         {uploadPanelOpen && (
           <div className="rounded-xl border border-[var(--border-medium)] bg-[var(--surface-muted)]/60 p-4">
@@ -1030,6 +1075,8 @@ export const EducationPage: React.FC = () => {
             </div>
           )}
         </div>
+          </>
+        )}
       </section>
 
       <EducationFormModal

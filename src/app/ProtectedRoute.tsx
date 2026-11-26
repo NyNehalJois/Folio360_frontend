@@ -26,7 +26,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  if (!isAuthenticated || !user?.email_verified) {
+  if (!isAuthenticated || !(user?.email_verified ?? user?.is_email_verified)) {
     return <Navigate to="/auth/login" state={{ from: location.pathname }} replace />;
   }
 

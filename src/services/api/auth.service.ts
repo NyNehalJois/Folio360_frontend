@@ -10,6 +10,16 @@ import type {
   TokenResponse,
 } from '@/types/api';
 
+function normalizeCurrentUser(user: CurrentUser): CurrentUser {
+  const verified = Boolean(user.is_email_verified ?? user.email_verified);
+  return {
+    ...user,
+    email_verified: verified,
+    is_email_verified: verified,
+    linked_providers: user.linked_providers ?? user.oauth_providers ?? [],
+  };
+}
+
 export const authService = {
   async register(payload: {
     email: string;
@@ -21,29 +31,30 @@ export const authService = {
       { ...payload, client_type: 'web' },
       { skipAuth: true },
     );
-    if (res.access_token && res.user?.email_verified) {
+    const normalizedUser = res.user ? normalizeCurrentUser(res.user) : res.user;
+    if (res.access_token && normalizedUser?.email_verified) {
       tokenStore.setAccessToken(res.access_token);
     } else {
       tokenStore.clear();
     }
-    return res;
+    return { ...res, user: normalizedUser };
   },
 
   async login(payload: { email: string; password: string }): Promise<AuthResponse> {
     const res = await httpClient.post<AuthResponse>(
       '/auth/login',
       { ...payload, client_type: 'web' },
-      { skipAuth: true },
+      { headers: { 'X-Client-Type': 'web' }, skipAuth: true },
     );
     tokenStore.setAccessToken(res.access_token);
-    return res;
+    return { ...res, user: normalizeCurrentUser(res.user) };
   },
 
   async refresh(): Promise<TokenResponse> {
     const res = await httpClient.post<TokenResponse>(
       '/auth/refresh',
       undefined,
-      { skipAuth: true, skipRefreshRetry: true },
+      { headers: { 'X-Client-Type': 'web' }, skipAuth: true, skipRefreshRetry: true },
     );
     tokenStore.setAccessToken(res.access_token);
     return res;
@@ -51,18 +62,27 @@ export const authService = {
 
   async logout(): Promise<void> {
     try {
-      await httpClient.post('/auth/logout', undefined, { skipRefreshRetry: true });
+      await httpClient.post('/auth/logout', undefined, {
+        headers: { 'X-Client-Type': 'web' },
+        skipRefreshRetry: true,
+      });
     } finally {
       tokenStore.clear();
     }
   },
 
-  me(): Promise<CurrentUser> {
-    return httpClient.get<CurrentUser>('/auth/me');
+  async me(): Promise<CurrentUser> {
+    const user = await httpClient.get<CurrentUser>('/auth/me');
+    return normalizeCurrentUser(user);
   },
 
-  verifyEmail(token: string): Promise<CurrentUser> {
-    return httpClient.post<CurrentUser>('/auth/verify-email', { token }, { skipAuth: true });
+  async verifyEmail(token: string): Promise<CurrentUser> {
+    const user = await httpClient.post<CurrentUser>(
+      '/auth/verify-email',
+      { token },
+      { skipAuth: true },
+    );
+    return user && typeof user === 'object' && 'email' in user ? normalizeCurrentUser(user) : user;
   },
 
   resendVerification(email?: string): Promise<void> {
@@ -108,7 +128,7 @@ export const authService = {
       skipAuth: true,
     });
     tokenStore.setAccessToken(res.access_token);
-    return res;
+    return { ...res, user: normalizeCurrentUser(res.user) };
   },
 
   listSessions(): Promise<ItemsResponse<Session>> {

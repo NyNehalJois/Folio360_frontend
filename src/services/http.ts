@@ -1,4 +1,4 @@
-import type { ApiErrorDetail, ApiErrorPayload, TokenResponse } from '@/types/api';
+import type { ApiErrorDetail, TokenResponse } from '@/types/api';
 import { API_CONFIG } from './config';
 
 /**
@@ -88,6 +88,7 @@ async function refreshAccessToken(): Promise<string | null> {
       const csrf = readCookie('f360_csrf');
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        'X-Client-Type': 'web',
       };
       if (csrf) {
         headers['X-CSRF-Token'] = csrf;
@@ -134,13 +135,55 @@ function buildUrl(
 
 async function parseErrorResponse(res: Response): Promise<ApiClientError> {
   try {
-    const json = (await res.json()) as Partial<ApiErrorPayload>;
+    const json = (await res.json()) as {
+      error?: {
+        code?: string;
+        message?: string;
+        details?: unknown;
+        request_id?: string;
+      };
+    };
     if (json && json.error) {
+      const rawDetails = json.error.details;
+      const detailsObj =
+        rawDetails && typeof rawDetails === 'object' && !Array.isArray(rawDetails)
+          ? (rawDetails as Record<string, unknown>)
+          : null;
+
+      let details: ApiErrorDetail[] = [];
+      if (Array.isArray(rawDetails)) {
+        details = rawDetails as ApiErrorDetail[];
+      } else if (detailsObj && Array.isArray(detailsObj.errors)) {
+        details = (detailsObj.errors as Array<{ loc?: unknown[]; msg?: unknown }>).map((item) => {
+          const locParts = Array.isArray(item.loc)
+            ? item.loc.filter((part) => part !== 'body').map(String)
+            : [];
+          return {
+            field: locParts.length > 0 ? locParts.join('.') : undefined,
+            issue: typeof item.msg === 'string' ? item.msg : undefined,
+          };
+        });
+      }
+
+      const resolvedCode =
+        json.error.code ||
+        (detailsObj && typeof detailsObj.code === 'string' ? detailsObj.code : undefined) ||
+        (res.status === 401 ? 'UNAUTHENTICATED' : 'INTERNAL_ERROR');
+
+      let resolvedMessage = json.error.message || res.statusText || 'Request failed.';
+      if (resolvedMessage === 'Validation failed' && details.length > 0) {
+        const first = details[0];
+        const cleanIssue = first.issue?.replace(/^Value error,\s*/i, '');
+        if (cleanIssue) {
+          resolvedMessage = first.field ? `${first.field}: ${cleanIssue}` : cleanIssue;
+        }
+      }
+
       return new ApiClientError(
         res.status,
-        json.error.code || 'INTERNAL_ERROR',
-        json.error.message || res.statusText || 'Request failed.',
-        json.error.details ?? [],
+        resolvedCode,
+        resolvedMessage,
+        details,
         json.error.request_id,
       );
     }
@@ -177,11 +220,16 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}): Promis
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  // Cookie-mode CSRF header for refresh and logout
-  if (path === '/auth/refresh' || path === '/auth/logout') {
-    const csrf = readCookie('f360_csrf');
-    if (csrf && !headers['X-CSRF-Token']) {
-      headers['X-CSRF-Token'] = csrf;
+  // Cookie-mode CSRF and client-type headers for auth endpoints
+  if (path === '/auth/login' || path === '/auth/refresh' || path === '/auth/logout') {
+    if (!headers['X-Client-Type']) {
+      headers['X-Client-Type'] = 'web';
+    }
+    if (path === '/auth/refresh' || path === '/auth/logout') {
+      const csrf = readCookie('f360_csrf');
+      if (csrf && !headers['X-CSRF-Token']) {
+        headers['X-CSRF-Token'] = csrf;
+      }
     }
   }
 
@@ -228,7 +276,7 @@ export const httpClient = {
       if (
         err instanceof ApiClientError &&
         err.status === 401 &&
-        err.code === 'TOKEN_EXPIRED' &&
+        (err.code === 'TOKEN_EXPIRED' || err.code === 'INVALID_ACCESS_TOKEN') &&
         !options.skipRefreshRetry &&
         !options.skipAuth
       ) {
