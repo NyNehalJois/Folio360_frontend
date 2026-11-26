@@ -102,22 +102,26 @@ export const DocumentUploadWidget: React.FC<DocumentUploadWidgetProps> = ({
 
   return (
     <div className="space-y-3">
-      <div className={`grid gap-3 ${compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'}`}>
+      <div
+        className={`grid items-end gap-3 ${
+          compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'
+        }`}
+      >
         <div className={compact ? 'sm:col-span-2' : ''}>
-          <label className="block font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-1">
-            Document File (PDF, JPG, PNG · max 10 MB)
+          <label className="block font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-1.5 whitespace-nowrap">
+            Document File
           </label>
           <input
             ref={fileInputRef}
             type="file"
             accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
             onChange={handleFileChange}
-            className="block w-full cursor-pointer rounded-md border border-[var(--border-medium)] bg-[var(--bg-main)] px-3 py-2 text-xs text-[var(--text-primary)] file:mr-3 file:cursor-pointer file:rounded-full file:border file:border-[var(--border-medium)] file:bg-[var(--bg-secondary)] file:px-3 file:py-1 file:text-xs file:font-medium file:text-[var(--text-primary)]"
+            className="block h-10 w-full cursor-pointer rounded-md border border-[var(--border-medium)] bg-[var(--bg-main)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] file:mr-2.5 file:cursor-pointer file:rounded-full file:border file:border-[var(--border-medium)] file:bg-[var(--bg-secondary)] file:px-3 file:py-1 file:text-xs file:font-medium file:text-[var(--text-primary)]"
           />
         </div>
 
         <div>
-          <label className="block font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-1">
+          <label className="block font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-1.5 whitespace-nowrap">
             Document Title
           </label>
           <input
@@ -125,18 +129,18 @@ export const DocumentUploadWidget: React.FC<DocumentUploadWidgetProps> = ({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g., Semester V Marksheet"
-            className="w-full rounded-md border border-[var(--border-medium)] bg-[var(--bg-main)] px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:border-[var(--text-primary)] focus:outline-none"
+            className="h-10 w-full rounded-md border border-[var(--border-medium)] bg-[var(--bg-main)] px-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:border-[var(--text-primary)] focus:outline-none"
           />
         </div>
 
         <div>
-          <label className="block font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-1">
+          <label className="block font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-1.5 whitespace-nowrap">
             Category
           </label>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as DocumentCategory)}
-            className="w-full rounded-md border border-[var(--border-medium)] bg-[var(--bg-main)] px-3 py-2 text-xs text-[var(--text-primary)] focus:border-[var(--text-primary)] focus:outline-none"
+            className="h-10 w-full rounded-md border border-[var(--border-medium)] bg-[var(--bg-main)] px-3 text-xs text-[var(--text-primary)] focus:border-[var(--text-primary)] focus:outline-none"
           >
             {DOCUMENT_CATEGORY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -151,7 +155,7 @@ export const DocumentUploadWidget: React.FC<DocumentUploadWidgetProps> = ({
         <div className="text-xs text-[var(--text-secondary)]">
           {selectedFile
             ? `Ready: ${selectedFile.name} (${formatFileSize(selectedFile.size)})`
-            : 'Choose a PDF, JPEG, or PNG document to upload.'}
+            : 'Accepted: PDF, JPEG, or PNG (max 10 MB).'}
         </div>
         <PillButton
           variant="primary"
