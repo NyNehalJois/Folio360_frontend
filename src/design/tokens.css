@@ -13,6 +13,7 @@
 
 :root,
 [data-theme="light"] {
+  color-scheme: light;
   --bg-main: #FDFDFC;
   --bg-secondary: #F7F4EF;
   --text-primary: #171614;
@@ -40,6 +41,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg-main: #171513;
   --bg-secondary: #24201C;
   --text-primary: #F5F0E8;

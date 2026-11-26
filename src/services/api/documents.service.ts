@@ -54,7 +54,12 @@ export const documentsService = {
 
   update(
     documentId: UUID,
-    payload: { title?: string; category?: DocumentCategory; notes?: string },
+    payload: {
+      title?: string;
+      category?: DocumentCategory;
+      notes?: string;
+      show_in_education?: boolean;
+    },
   ): Promise<Document> {
     return httpClient.patch<Document>(`/documents/${documentId}`, payload);
   },

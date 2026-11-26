@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, Check, Globe, Lock, X } from 'lucide-react';
+import { AlertCircle, Check, FileText, Globe, Lock, X } from 'lucide-react';
 import { PillButton } from '@/design/components/PillButton';
+import {
+  DocumentUploadWidget,
+  formatDocumentCategory,
+  formatFileSize,
+} from '@/features/documents/DocumentUploadWidget';
 import { educationService } from '@/services/api/education.service';
-import type { Education, EducationCreate, EducationLevel, Visibility } from '@/types/api';
+import type { Document, Education, EducationCreate, EducationLevel, Visibility } from '@/types/api';
 import {
   EDUCATION_LEVEL_OPTIONS,
   MONTH_OPTIONS,
@@ -15,6 +20,8 @@ import {
 interface EducationFormModalProps {
   open: boolean;
   editingRecord: Education | null;
+  availableDocuments: Document[];
+  onDocumentUploaded: (doc: Document) => void;
   onClose: () => void;
   onSaved: (record: Education, mode: 'create' | 'edit') => void;
 }
@@ -28,11 +35,16 @@ const LABEL_CLASS =
 export const EducationFormModal: React.FC<EducationFormModalProps> = ({
   open,
   editingRecord,
+  availableDocuments,
+  onDocumentUploaded,
   onClose,
   onSaved,
 }) => {
   const [values, setValues] = useState<EducationFormValues>(() =>
     toInitialFormValues(editingRecord),
+  );
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>(
+    () => editingRecord?.documents?.map((doc) => doc.id) ?? [],
   );
   const [errors, setErrors] = useState<EducationFormErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -41,6 +53,7 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
   useEffect(() => {
     if (!open) return;
     setValues(toInitialFormValues(editingRecord));
+    setSelectedDocIds(editingRecord?.documents?.map((doc) => doc.id) ?? []);
     setErrors({});
     setSubmitError(null);
     setSaving(false);
@@ -132,7 +145,7 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
       result_value: editingRecord?.result_value ?? null,
       show_result_publicly: editingRecord?.show_result_publicly ?? false,
       achievements: editingRecord?.achievements ?? [],
-      document_ids: editingRecord?.documents?.map((doc) => doc.id) ?? [],
+      document_ids: selectedDocIds,
     };
 
     setSaving(true);
@@ -525,6 +538,77 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
               {errors.description && (
                 <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.description}</p>
               )}
+            </div>
+
+            {/* Attach or Upload Academic Documents */}
+            <div className="space-y-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/35 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium text-[var(--text-primary)]">
+                    Academic Documents
+                  </p>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    Attach existing documents or upload new marksheets and certificates.
+                  </p>
+                </div>
+                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--text-secondary)]">
+                  {selectedDocIds.length} attached
+                </span>
+              </div>
+
+              {availableDocuments.length > 0 && (
+                <div className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
+                  {availableDocuments.map((doc) => {
+                    const checked = selectedDocIds.includes(doc.id);
+                    return (
+                      <label
+                        key={doc.id}
+                        className={`flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs transition-colors ${
+                          checked
+                            ? 'border-[var(--border-accent)] bg-[var(--surface-elevated)]'
+                            : 'border-[var(--border-subtle)] bg-[var(--bg-main)] hover:border-[var(--border-medium)]'
+                        }`}
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setSelectedDocIds((prev) =>
+                                prev.includes(doc.id)
+                                  ? prev.filter((id) => id !== doc.id)
+                                  : [...prev, doc.id],
+                              )
+                            }
+                            className="h-3.5 w-3.5 rounded border-[var(--border-medium)] accent-[var(--accent)]"
+                          />
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
+                          <span className="truncate font-medium text-[var(--text-primary)]">
+                            {doc.title}
+                          </span>
+                        </span>
+                        <span className="shrink-0 font-mono text-[10px] text-[var(--text-secondary)]">
+                          {formatDocumentCategory(doc.category)} · {formatFileSize(doc.size_bytes)}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="border-t border-[var(--border-subtle)] pt-3">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-2">
+                  Upload &amp; Attach New Document
+                </p>
+                <DocumentUploadWidget
+                  compact
+                  submitLabel="Upload & attach"
+                  onUploaded={(doc) => {
+                    onDocumentUploaded(doc);
+                    setSelectedDocIds((prev) => (prev.includes(doc.id) ? prev : [...prev, doc.id]));
+                  }}
+                />
+              </div>
             </div>
 
             <div className="flex flex-col gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/35 p-4 sm:flex-row sm:items-center sm:justify-between">

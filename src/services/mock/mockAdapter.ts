@@ -2,6 +2,9 @@ import { sortEducationTimeline } from '@/features/education/educationHelpers';
 import { ApiClientError, registerMockHandler, tokenStore, type RequestOptions } from '@/services/http';
 import type {
   CurrentUser,
+  Document,
+  DocumentCategory,
+  DocumentRef,
   Education,
   EducationCreate,
   Paginated,
@@ -39,6 +42,7 @@ const MOCK_ACCOUNTS_KEY = 'f360_mock_accounts';
 const MOCK_PROFILES_KEY = 'f360_mock_profiles';
 const MOCK_VISIBILITIES_KEY = 'f360_mock_visibilities';
 const MOCK_EDUCATIONS_KEY = 'f360_mock_educations';
+const MOCK_DOCUMENTS_KEY = 'f360_mock_documents';
 
 function readMockSessionFlag(): string | null {
   try {
@@ -168,9 +172,34 @@ function saveMockEducations(map: Map<string, Education[]>): void {
   }
 }
 
+function loadMockDocuments(): Map<string, Document[]> {
+  const map = new Map<string, Document[]>([[MOCK_USER.id, structuredClone(MOCK_DOCUMENTS)]]);
+  try {
+    const raw = sessionStorage.getItem(MOCK_DOCUMENTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as [string, Document[]][];
+      for (const [k, v] of parsed) {
+        map.set(k, v);
+      }
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  return map;
+}
+
+function saveMockDocuments(map: Map<string, Document[]>): void {
+  try {
+    sessionStorage.setItem(MOCK_DOCUMENTS_KEY, JSON.stringify(Array.from(map.entries())));
+  } catch {
+    // Ignore storage write errors
+  }
+}
+
 const mockProfiles = loadMockProfiles();
 const mockVisibilities = loadMockVisibilities();
 const mockEducations = loadMockEducations();
+const mockDocuments = loadMockDocuments();
 
 function getOrCreateEducations(userId: string): Education[] {
   const existing = mockEducations.get(userId);
@@ -179,6 +208,34 @@ function getOrCreateEducations(userId: string): Education[] {
   mockEducations.set(userId, fresh);
   saveMockEducations(mockEducations);
   return fresh;
+}
+
+function getOrCreateDocuments(userId: string): Document[] {
+  const existing = mockDocuments.get(userId);
+  if (existing) return existing;
+  const fresh: Document[] = [];
+  mockDocuments.set(userId, fresh);
+  saveMockDocuments(mockDocuments);
+  return fresh;
+}
+
+function resolveDocumentRefs(userId: string, documentIds?: string[]): DocumentRef[] {
+  if (!documentIds || documentIds.length === 0) return [];
+  const docs = getOrCreateDocuments(userId);
+  const byId = new Map(docs.map((d) => [d.id, d]));
+  const refs: DocumentRef[] = [];
+  for (const id of documentIds) {
+    const doc = byId.get(id);
+    if (doc) {
+      refs.push({
+        id: doc.id,
+        title: doc.title,
+        category: doc.category,
+        mime_type: doc.mime_type,
+      });
+    }
+  }
+  return refs;
 }
 
 function getOrCreateProfile(user: CurrentUser): Profile {
@@ -532,7 +589,17 @@ async function handleMockRequest(
   if (method === 'GET' && path === '/analytics/dashboard') {
     const acct = getSignedInAccount();
     const firstName = acct?.user.full_name.split(' ')[0] || MOCK_DASHBOARD.first_name;
-    return { ...MOCK_DASHBOARD, first_name: firstName };
+    const docsCount = acct ? getOrCreateDocuments(acct.user.id).length : MOCK_DOCUMENTS.length;
+    const eduCount = acct ? getOrCreateEducations(acct.user.id).length : MOCK_EDUCATION.length;
+    return {
+      ...MOCK_DASHBOARD,
+      first_name: firstName,
+      counts: {
+        ...MOCK_DASHBOARD.counts,
+        documents: docsCount,
+        education: eduCount,
+      },
+    };
   }
 
   if (method === 'GET' && path === '/activity') {
@@ -795,7 +862,7 @@ async function handleMockRequest(
         computed_cgpa: null,
         show_result_publicly: Boolean(body.show_result_publicly),
         achievements: body.achievements ?? [],
-        documents: [],
+        documents: resolveDocumentRefs(acct.user.id, body.document_ids),
         visibility: body.visibility ?? 'public',
         created_at: now,
         updated_at: now,
@@ -869,6 +936,10 @@ async function handleMockRequest(
         start_year: nextStartYear,
         end_month: nextEndMonth,
         end_year: nextEndYear,
+        documents:
+          body.document_ids !== undefined
+            ? resolveDocumentRefs(acct.user.id, body.document_ids)
+            : existing.documents,
         updated_at: new Date().toISOString(),
       };
       const nextList = items.map((item) => (item.id === eduId ? updated : item));
@@ -884,12 +955,122 @@ async function handleMockRequest(
     }
   }
 
+  // --- Documents ---
+  if (path === '/documents') {
+    const acct = requireMockAuth(options);
+    const docs = getOrCreateDocuments(acct.user.id);
+    if (method === 'GET') {
+      const q = String(options.query?.q ?? '').trim().toLowerCase();
+      const cat = options.query?.category ? String(options.query.category) : '';
+      const filtered = docs.filter((d) => {
+        if (cat && d.category !== cat) return false;
+        if (
+          q &&
+          !d.title.toLowerCase().includes(q) &&
+          !d.original_filename.toLowerCase().includes(q)
+        ) {
+          return false;
+        }
+        return true;
+      });
+      return paginate(filtered, options);
+    }
+    if (method === 'POST') {
+      const formData = options.body;
+      if (!(formData instanceof FormData)) {
+        throw new ApiClientError(400, 'BAD_REQUEST', 'Expected multipart/form-data upload.');
+      }
+      const file = formData.get('file');
+      if (!(file instanceof File)) {
+        throw new ApiClientError(422, 'VALIDATION_ERROR', 'Document file is required.');
+      }
+      const allowed = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+      if (!allowed.has(file.type)) {
+        throw new ApiClientError(
+          415,
+          'UNSUPPORTED_FILE_TYPE',
+          'Unsupported document format. Upload PDF, JPEG, or PNG.',
+        );
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        throw new ApiClientError(413, 'FILE_TOO_LARGE', 'File exceeds the 10 MB maximum limit.');
+      }
+
+      const rawCategory = String(formData.get('category') ?? 'other') as DocumentCategory;
+      const rawTitle = String(formData.get('title') ?? '').trim();
+      const fallbackTitle = file.name.replace(/\.[^.]+$/, '') || file.name;
+      const now = new Date().toISOString();
+      const created: Document = {
+        id:
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `doc-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+        title: rawTitle || fallbackTitle,
+        original_filename: file.name,
+        category: rawCategory || 'other',
+        mime_type: file.type as Document['mime_type'],
+        size_bytes: file.size,
+        page_count: file.type === 'application/pdf' ? 1 : null,
+        sha256: 'mock-sha256-' + Date.now().toString(16),
+        notes: null,
+        processing_status: 'none',
+        show_in_education: rawCategory === 'marksheet' || rawCategory === 'certificate',
+        attached_to: [],
+        uploaded_at: now,
+        updated_at: now,
+      };
+      const nextDocs = [created, ...docs];
+      mockDocuments.set(acct.user.id, nextDocs);
+      saveMockDocuments(mockDocuments);
+      return { document: created, processing_job: null };
+    }
+  }
+
+  if (path.startsWith('/documents/') && path !== '/documents/categories') {
+    const acct = requireMockAuth(options);
+    const docId = decodeURIComponent(path.replace('/documents/', '').split('/')[0]);
+    const docs = getOrCreateDocuments(acct.user.id);
+    const idx = docs.findIndex((d) => d.id === docId);
+    if (idx === -1) {
+      throw new ApiClientError(404, 'NOT_FOUND', 'Document not found.');
+    }
+    if (method === 'GET') return docs[idx];
+    if (method === 'PATCH') {
+      const body = (options.body ?? {}) as {
+        title?: string;
+        category?: DocumentCategory;
+        notes?: string;
+        show_in_education?: boolean;
+      };
+      const updated: Document = {
+        ...docs[idx],
+        title: body.title !== undefined ? body.title.trim() || docs[idx].title : docs[idx].title,
+        category: body.category ?? docs[idx].category,
+        notes: body.notes !== undefined ? body.notes : docs[idx].notes,
+        show_in_education:
+          body.show_in_education !== undefined
+            ? body.show_in_education
+            : docs[idx].show_in_education,
+        updated_at: new Date().toISOString(),
+      };
+      const nextDocs = docs.map((d) => (d.id === docId ? updated : d));
+      mockDocuments.set(acct.user.id, nextDocs);
+      saveMockDocuments(mockDocuments);
+      return updated;
+    }
+    if (method === 'DELETE') {
+      const nextDocs = docs.filter((d) => d.id !== docId);
+      mockDocuments.set(acct.user.id, nextDocs);
+      saveMockDocuments(mockDocuments);
+      return undefined;
+    }
+  }
+
   // --- Portfolio Collections ---
   if (method === 'GET' && path === '/projects') return paginate(MOCK_PROJECTS, options);
   if (method === 'GET' && path === '/skills/me') return paginate(MOCK_SKILLS, options);
   if (method === 'GET' && path === '/certificates') return paginate(MOCK_CERTIFICATES, options);
   if (method === 'GET' && path === '/experience') return paginate(MOCK_EXPERIENCE, options);
-  if (method === 'GET' && path === '/documents') return paginate(MOCK_DOCUMENTS, options);
   if (method === 'GET' && path === '/resumes') return paginate(MOCK_RESUMES, options);
   if (method === 'GET' && path === '/sharing/links') return paginate(MOCK_SHARE_LINKS, options);
 
@@ -931,6 +1112,10 @@ async function handleMockRequest(
     }
     const prof = getOrCreateProfile(targetAccount.user);
     const userEducations = getOrCreateEducations(targetAccount.user.id);
+    const userDocs = getOrCreateDocuments(targetAccount.user.id);
+    const visibleEduDocsById = new Map(
+      userDocs.filter((d) => d.show_in_education !== false).map((d) => [d.id, d]),
+    );
     const publicEducations = sortEducationTimeline(
       userEducations.filter((item) => item.visibility === 'public'),
     ).map((e) => ({
@@ -951,7 +1136,16 @@ async function handleMockRequest(
       description: e.description,
       result: e.show_result_publicly ? (e.result_value ?? e.computed_cgpa) : undefined,
       achievements: e.achievements,
+      documents: (e.documents ?? []).filter((ref) => visibleEduDocsById.has(ref.id)),
     }));
+    const selectedEducationDocuments: DocumentRef[] = userDocs
+      .filter((d) => d.show_in_education === true)
+      .map((d) => ({
+        id: d.id,
+        title: d.title,
+        category: d.category,
+        mime_type: d.mime_type,
+      }));
     return {
       slug: prof.slug,
       full_name: prof.full_name,
@@ -970,6 +1164,9 @@ async function handleMockRequest(
       interests: prof.interests,
       sections: {
         education: vis.public_sections.education ? publicEducations : undefined,
+        education_documents: vis.public_sections.education
+          ? selectedEducationDocuments
+          : undefined,
         projects: vis.public_sections.projects ? MOCK_PUBLIC_PROFILE.sections.projects : undefined,
         skills: vis.public_sections.skills ? MOCK_PUBLIC_PROFILE.sections.skills : undefined,
         certificates: vis.public_sections.certificates

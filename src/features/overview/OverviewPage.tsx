@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ArrowRight,
   ArrowUpRight,
@@ -12,8 +12,14 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
 import { ErrorState, LoadingState } from '@/design/components/EditorialStates';
 import { StrandCanvas } from '@/design/strands/StrandCanvas';
+import {
+  DocumentUploadWidget,
+  formatDocumentCategory,
+  formatFileSize,
+} from '@/features/documents/DocumentUploadWidget';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import { analyticsService } from '@/services/api';
+import { analyticsService, documentsService } from '@/services/api';
+import type { Document } from '@/types/api';
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -43,6 +49,22 @@ export const OverviewPage: React.FC = () => {
     () => analyticsService.getDashboard(),
     [],
   );
+  const [recentDocs, setRecentDocs] = useState<Document[]>([]);
+  const [docsTotal, setDocsTotal] = useState<number | null>(null);
+
+  const loadRecentDocs = useCallback(async () => {
+    try {
+      const res = await documentsService.list({ page: 1, page_size: 4 });
+      setRecentDocs(res.items);
+      setDocsTotal(res.total);
+    } catch {
+      // Non-fatal if documents fail to load separately
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRecentDocs();
+  }, [loadRecentDocs]);
 
   if (loading) {
     return (
@@ -61,22 +83,14 @@ export const OverviewPage: React.FC = () => {
   }
 
   const quickActions = [
-    { label: 'Add Record', to: '/workspace/education', icon: Plus },
-    { label: 'Upload Document', to: '/workspace/documents', icon: Upload },
+    { label: 'Add Education', to: '/workspace/education', icon: Plus },
+    { label: 'Education & Vault', to: '/workspace/education#education-documents', icon: Upload },
     { label: 'Generate Resume', to: '/workspace/resumes', icon: FileText },
-    { label: 'Share Profile', to: '/workspace/sharing', icon: ArrowUpRight },
+    { label: 'Profile Settings', to: '/workspace/profile', icon: ArrowUpRight },
   ];
 
   return (
     <div className="relative min-h-[calc(100vh-68px)] overflow-hidden">
-      {/* Shared full-bleed StrandCanvas background matching the public homepage animation */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 h-full w-full"
-      >
-        <StrandCanvas variant="hero" opacityScale={0.72} className="h-full w-full" />
-      </div>
-
       <div className="relative z-10 mx-auto max-w-[1120px] px-6 py-10 md:px-10 md:py-12">
         {/* Personalized Greeting */}
         <div className="max-w-xl">
@@ -177,7 +191,7 @@ export const OverviewPage: React.FC = () => {
                   Recent Activity
                 </h2>
                 <span className="font-mono text-[11px] uppercase tracking-wider text-[var(--text-secondary)]">
-                  {data.counts.projects} projects · {data.counts.documents} docs
+                  {data.counts.projects} projects · {docsTotal ?? data.counts.documents} docs
                 </span>
               </div>
 
@@ -239,16 +253,78 @@ export const OverviewPage: React.FC = () => {
                   folio360.in/@{user?.slug || data.first_name.toLowerCase()}
                 </p>
                 <Link
-                  to="/workspace/sharing"
+                  to="/workspace/profile"
                   className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-primary)] hover:underline"
                 >
-                  Manage visibility &amp; QR
+                  Manage profile &amp; visibility
                   <ArrowUpRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
             </section>
           </div>
         </div>
+
+        {/* Inline Document Upload inside Overview */}
+        <section
+          id="overview-documents"
+          aria-labelledby="overview-upload-heading"
+          className="mt-10 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)]/95 p-6"
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--border-subtle)] pb-3">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+                QUICK VAULT UPLOAD
+              </p>
+              <h2
+                id="overview-upload-heading"
+                className="mt-1 font-serif text-2xl text-[var(--text-primary)]"
+              >
+                Upload Documents
+              </h2>
+            </div>
+            <Link
+              to="/workspace/education#education-documents"
+              className="inline-flex items-center gap-1 font-mono text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            >
+              Manage in Education
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          <div className="mt-4">
+            <DocumentUploadWidget
+              onUploaded={(doc) => {
+                setRecentDocs((prev) => [doc, ...prev].slice(0, 4));
+                setDocsTotal((prev) => (prev ?? data.counts.documents) + 1);
+                void refetch();
+              }}
+            />
+          </div>
+
+          {recentDocs.length > 0 && (
+            <div className="mt-5 border-t border-[var(--border-subtle)] pt-4">
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-2.5">
+                Recent Uploads ({docsTotal ?? recentDocs.length})
+              </p>
+              <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                {recentDocs.map((doc) => (
+                  <li
+                    key={doc.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-main)] px-3.5 py-2.5 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-[var(--text-primary)]">{doc.title}</p>
+                      <p className="mt-0.5 truncate font-mono text-[10px] text-[var(--text-secondary)]">
+                        {formatDocumentCategory(doc.category)} · {formatFileSize(doc.size_bytes)}
+                      </p>
+                    </div>
+                    <FileText className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

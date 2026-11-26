@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ExternalLink,
+  FileText,
   Globe,
   Lock,
   Mail,
@@ -313,10 +314,45 @@ export const PublicProfilePage: React.FC = () => {
                               {edu.description}
                             </p>
                           )}
+                          {edu.documents && edu.documents.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {edu.documents.map((doc) => (
+                                <span
+                                  key={doc.id}
+                                  className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-1 text-xs text-[var(--text-primary)]"
+                                >
+                                  <FileText className="h-3 w-3 text-[var(--text-secondary)]" />
+                                  <span>{doc.title}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       );
                     })
                   )}
+
+                  {profile.sections.education_documents &&
+                    profile.sections.education_documents.length > 0 && (
+                      <div className="py-5">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+                          Selected Academic Documents
+                        </p>
+                        <ul className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                          {profile.sections.education_documents.map((doc) => (
+                            <li
+                              key={doc.id}
+                              className="flex items-center gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-3.5 py-2.5 text-xs"
+                            >
+                              <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
+                              <span className="truncate font-medium text-[var(--text-primary)]">
+                                {doc.title}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                 </div>
               )}
 

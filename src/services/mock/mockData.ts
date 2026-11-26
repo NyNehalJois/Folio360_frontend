@@ -337,6 +337,7 @@ export const MOCK_DOCUMENTS: Document[] = [
     sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     notes: 'Sample placeholder document metadata',
     processing_status: 'needs_review',
+    show_in_education: true,
     attached_to: [],
     uploaded_at: '2026-11-16T14:20:00Z',
     updated_at: '2026-11-16T14:21:00Z',

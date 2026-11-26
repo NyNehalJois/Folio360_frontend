@@ -751,6 +751,8 @@ export interface Document {
   sha256: string;
   notes: string | null;
   processing_status: DocumentProcessingStatus;
+  /** Phase 2 backend dependency: controls whether this document is displayed in the Education tab */
+  show_in_education?: boolean;
   attached_to: {
     entity_type: string;
     entity_id: UUID;
@@ -964,7 +966,9 @@ export interface PublicProfile {
       description?: string | null;
       result?: string;
       achievements: string[];
+      documents?: DocumentRef[];
     }[];
+    education_documents?: DocumentRef[];
     academics?: { cgpa: number };
     projects?: {
       title: string;

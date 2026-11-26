@@ -10,17 +10,18 @@ import {
   Home,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
-  Share2,
   Sparkles,
   User,
-  Vault,
   X,
 } from 'lucide-react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
 import { FolioLogo } from '@/design/components/FolioLogo';
 import { ThemeToggle } from '@/design/components/ThemeToggle';
+import { StrandCanvas } from '@/design/strands/StrandCanvas';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { analyticsService } from '@/services/api';
 
@@ -33,21 +34,19 @@ interface NavItem {
 
 const SIDEBAR_ITEMS: NavItem[] = [
   { label: 'Overview', to: '/workspace', end: true, icon: Home },
-  { label: 'Profile', to: '/workspace/profile', icon: User },
   { label: 'Education', to: '/workspace/education', icon: GraduationCap },
   { label: 'Projects', to: '/workspace/projects', icon: FolderGit2 },
   { label: 'Skills', to: '/workspace/skills', icon: Sparkles },
   { label: 'Certificates', to: '/workspace/certificates', icon: Award },
   { label: 'Experience', to: '/workspace/experience', icon: Briefcase },
-  { label: 'Documents', to: '/workspace/documents', icon: Vault },
   { label: 'Resume Studio', to: '/workspace/resumes', icon: FileText },
-  { label: 'Sharing', to: '/workspace/sharing', icon: Share2 },
 ];
 
 export const WorkspaceLayout: React.FC = () => {
   const { user, logout, logoutAll } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -112,6 +111,20 @@ export const WorkspaceLayout: React.FC = () => {
             className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-subtle)] text-[var(--text-primary)] lg:hidden cursor-pointer"
           >
             <Menu className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((prev) => !prev)}
+            aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+            aria-expanded={!sidebarCollapsed}
+            title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+            className="hidden lg:flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:border-[var(--border-medium)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+          >
+            {sidebarCollapsed ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <PanelLeftClose className="h-4 w-4" />
+            )}
           </button>
           <FolioLogo to="/workspace" size="sm" />
         </div>
@@ -274,15 +287,17 @@ export const WorkspaceLayout: React.FC = () => {
 
       {/* Main Workspace Frame */}
       <div className="flex flex-1">
-        {/* Desktop Sidebar */}
-        <aside className="hidden lg:flex w-[228px] shrink-0 flex-col justify-between border-r border-[var(--border-subtle)] bg-[var(--bg-main)] px-3.5 py-6">
-          {renderNavLinks()}
-          <div className="px-3 pt-6 border-t border-[var(--border-subtle)]">
-            <p className="font-mono text-[10px] tracking-wider text-[var(--text-secondary)]">
-              folio360.in/@{user?.slug || 'username'}
-            </p>
-          </div>
-        </aside>
+        {/* Desktop Sidebar (toggleable) */}
+        {!sidebarCollapsed && (
+          <aside className="relative z-20 hidden lg:flex w-[228px] shrink-0 flex-col justify-between border-r border-[var(--border-subtle)] bg-[var(--bg-main)] px-3.5 py-6">
+            {renderNavLinks()}
+            <div className="px-3 pt-6 border-t border-[var(--border-subtle)]">
+              <p className="font-mono text-[10px] tracking-wider text-[var(--text-secondary)]">
+                folio360.in/@{user?.slug || 'username'}
+              </p>
+            </div>
+          </aside>
+        )}
 
         {/* Mobile Drawer */}
         {sidebarOpen && (
@@ -315,9 +330,17 @@ export const WorkspaceLayout: React.FC = () => {
           </div>
         )}
 
-        {/* Page Content */}
-        <main className="flex-1 min-w-0 bg-[var(--bg-main)]">
-          <Outlet />
+        {/* Page Content with shared StrandCanvas background across all workspace pages */}
+        <main className="relative flex-1 min-w-0 overflow-hidden bg-[var(--bg-main)]">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-0 z-0 h-full w-full"
+          >
+            <StrandCanvas variant="hero" opacityScale={0.72} className="h-full w-full" />
+          </div>
+          <div className="relative z-10">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
