@@ -50,22 +50,27 @@ export const EducationPage: React.FC = () => {
 
   const [docSearch, setDocSearch] = useState('');
   const [docCategoryFilter, setDocCategoryFilter] = useState<DocumentCategory | 'all'>('all');
+  const [docsVaultOpen, setDocsVaultOpen] = useState(false);
   const [togglingDocId, setTogglingDocId] = useState<string | null>(null);
   const [openDocMenuId, setOpenDocMenuId] = useState<string | null>(null);
   const [confirmDeleteDocId, setConfirmDeleteDocId] = useState<string | null>(null);
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!openDocMenuId) return;
+    if (!openDocMenuId && !docsVaultOpen) return;
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
-      if (!target?.closest('[data-doc-visibility-menu]')) {
+      if (openDocMenuId && !target?.closest('[data-doc-visibility-menu]')) {
         setOpenDocMenuId(null);
+      }
+      if (docsVaultOpen && !target?.closest('[data-docs-vault-dropdown]')) {
+        setDocsVaultOpen(false);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setOpenDocMenuId(null);
+        setDocsVaultOpen(false);
       }
     };
     document.addEventListener('mousedown', handlePointerDown);
@@ -74,7 +79,7 @@ export const EducationPage: React.FC = () => {
       document.removeEventListener('mousedown', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [openDocMenuId]);
+  }, [openDocMenuId, docsVaultOpen]);
 
   const [actionBanner, setActionBanner] = useState<{
     tone: 'success' | 'error';
@@ -756,43 +761,73 @@ export const EducationPage: React.FC = () => {
           />
         </div>
 
-        {/* Search & Category Filter */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-secondary)]" />
-            <input
-              type="search"
-              value={docSearch}
-              onChange={(e) => setDocSearch(e.target.value)}
-              placeholder="Search uploaded documents…"
-              className="w-full rounded-full border border-[var(--border-medium)] bg-[var(--bg-main)] py-2 pl-9 pr-4 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:border-[var(--text-primary)] focus:outline-none"
-            />
-          </div>
-
-          <select
-            aria-label="Filter documents by category"
-            value={docCategoryFilter}
-            onChange={(e) => setDocCategoryFilter(e.target.value as DocumentCategory | 'all')}
-            className="rounded-full border border-[var(--border-medium)] bg-[var(--bg-main)] px-3.5 py-2 text-xs text-[var(--text-primary)] focus:border-[var(--text-primary)] focus:outline-none"
+        {/* Collapsible Dropdown for Uploaded Documents */}
+        <div className="relative" data-docs-vault-dropdown>
+          <button
+            type="button"
+            aria-expanded={docsVaultOpen}
+            aria-controls="uploaded-documents-dropdown-panel"
+            onClick={() => setDocsVaultOpen((prev) => !prev)}
+            className="flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--border-medium)] bg-[var(--bg-main)] px-4 py-3 text-left text-sm transition-colors hover:border-[var(--text-primary)] cursor-pointer"
           >
-            <option value="all">All categories</option>
-            {DOCUMENT_CATEGORY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
+            <span className="flex items-center gap-2.5">
+              <FileText className="h-4 w-4 text-[var(--text-secondary)]" />
+              <span className="font-medium text-[var(--text-primary)]">
+                {docsVaultOpen ? 'Uploaded Documents' : 'View Uploaded Documents'}
+              </span>
+              <span className="font-mono text-xs text-[var(--text-secondary)]">
+                ({documents.length})
+              </span>
+            </span>
+            <ChevronDown
+              className={`h-4 w-4 text-[var(--text-secondary)] transition-transform duration-200 ${
+                docsVaultOpen ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
 
-        {/* Document List with "Display in Education tab" Selector */}
-        {filteredDocuments.length === 0 ? (
-          <p className="py-6 text-center text-sm text-[var(--text-secondary)]">
-            {documents.length === 0
-              ? 'No documents uploaded yet. Upload your first marksheet or certificate above.'
-              : 'No documents match your current filter.'}
-          </p>
-        ) : (
-          <ul className="divide-y divide-[var(--border-subtle)]">
+          {docsVaultOpen && (
+            <div
+              id="uploaded-documents-dropdown-panel"
+              className="mt-2 space-y-4 rounded-xl border border-[var(--border-medium)] bg-[var(--bg-main)] p-4 shadow-lg"
+            >
+              {/* Search & Category Filter */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-secondary)]" />
+                  <input
+                    type="search"
+                    value={docSearch}
+                    onChange={(e) => setDocSearch(e.target.value)}
+                    placeholder="Search uploaded documents…"
+                    className="w-full rounded-full border border-[var(--border-medium)] bg-[var(--surface-elevated)] py-2 pl-9 pr-4 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:border-[var(--text-primary)] focus:outline-none"
+                  />
+                </div>
+
+                <select
+                  aria-label="Filter documents by category"
+                  value={docCategoryFilter}
+                  onChange={(e) => setDocCategoryFilter(e.target.value as DocumentCategory | 'all')}
+                  className="rounded-full border border-[var(--border-medium)] bg-[var(--surface-elevated)] px-3.5 py-2 text-xs text-[var(--text-primary)] focus:border-[var(--text-primary)] focus:outline-none"
+                >
+                  <option value="all">All categories</option>
+                  {DOCUMENT_CATEGORY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Document List with "Display in Education tab" Selector */}
+              {filteredDocuments.length === 0 ? (
+                <p className="py-6 text-center text-sm text-[var(--text-secondary)]">
+                  {documents.length === 0
+                    ? 'No documents uploaded yet. Upload your first marksheet or certificate above.'
+                    : 'No documents match your current filter.'}
+                </p>
+              ) : (
+                <ul className="divide-y divide-[var(--border-subtle)]">
             {filteredDocuments.map((doc) => {
               const isSelected = Boolean(doc.show_in_education);
               const isToggling = togglingDocId === doc.id;
@@ -933,8 +968,11 @@ export const EducationPage: React.FC = () => {
                 </li>
               );
             })}
-          </ul>
-        )}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
       </section>
 
       <EducationFormModal
