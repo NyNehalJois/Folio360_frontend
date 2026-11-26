@@ -104,9 +104,13 @@ function pointsToSmoothPath(pts: Point[]): string {
   return d;
 }
 
+const LOOP_PERIOD_SEC = 16;
+
 /**
  * Computes a 3D twisting silk ribbon strand in normalized parametric space `u` in [-1, 1]
- * driven by a shared clock `time` (seconds) and subtle pointer offset.
+ * driven by a seamless periodic clock `time` (seconds) and subtle pointer offset.
+ * All temporal frequencies are integer harmonics of `2π / LOOP_PERIOD_SEC` so the loop
+ * repeats seamlessly without drift or sudden jumps.
  */
 function computeStrandPath(
   cfg: VariantConfig,
@@ -119,19 +123,20 @@ function computeStrandPath(
   const steps = cfg.sampleSteps;
   const w = cfg.width;
   const h = cfg.height;
+  const theta = ((time % LOOP_PERIOD_SEC) / LOOP_PERIOD_SEC) * Math.PI * 2;
 
   for (let s = 0; s <= steps; s++) {
     const t = s / steps;
 
     if (cfg.mode === 'hero3d') {
-      // Enters cleanly past the bottom-left-center edge and exits smoothly off the right edge
-      const travellingWave = Math.sin(t * Math.PI * 2.5 - time * 0.65);
-      const secondaryWave = Math.cos(t * Math.PI * 1.4 + time * 0.38);
+      // Seamless periodic travelling waves (integer harmonics of theta)
+      const travellingWave = Math.sin(t * Math.PI * 2.4 - theta * 2);
+      const secondaryWave = Math.cos(t * Math.PI * 1.4 + theta);
 
       const spineX =
         w * 0.16 +
         t * w * 0.92 +
-        24 * Math.sin(t * Math.PI * 1.7 - time * 0.42);
+        20 * Math.sin(t * Math.PI * 1.7 - theta);
 
       const crestArch = Math.exp(-Math.pow((t - 0.74) / 0.17, 2));
       const spineY =
@@ -139,76 +144,76 @@ function computeStrandPath(
         t * h * 0.68 -
         h * 0.15 * Math.sin(t * Math.PI) -
         h * 0.17 * crestArch +
-        26 * travellingWave * Math.sin(t * Math.PI) +
-        14 * secondaryWave * Math.sin(t * Math.PI);
+        22 * travellingWave * Math.sin(t * Math.PI) +
+        12 * secondaryWave * Math.sin(t * Math.PI);
 
-      // Travelling waist pinch & breathing width envelope
-      const pinchCenter = 0.46 + 0.06 * Math.sin(time * 0.34);
-      const waist = 0.22 + 0.78 * Math.pow(Math.abs(t - pinchCenter) * 1.85, 1.15);
+      // Gentle breathing waist pinch
+      const pinchCenter = 0.46 + 0.05 * Math.sin(theta);
+      const waist = 0.24 + 0.76 * Math.pow(Math.abs(t - pinchCenter) * 1.85, 1.15);
 
-      // 3D rotation around ribbon axis with per-strand phase offset `u`
+      // Smooth periodic 3D twist around ribbon axis
       const twist =
-        t * Math.PI * 2.45 +
-        time * 0.56 +
-        0.92 * Math.sin(t * Math.PI * 1.9 - time * 0.44) +
-        u * 0.44 * Math.sin(t * Math.PI * 1.6 + time * 0.32);
+        t * Math.PI * 2.35 +
+        theta +
+        0.72 * Math.sin(t * Math.PI * 1.8 - theta) +
+        u * 0.36 * Math.sin(t * Math.PI * 1.5 + theta);
 
       const curlA = Math.exp(-Math.pow((t - 0.29) / 0.12, 2));
       const curlB = Math.exp(-Math.pow((t - 0.72) / 0.12, 2));
 
-      const radiusY = h * 0.25 * waist * (1 + 0.12 * Math.sin(time * 0.4 + t * 4));
-      const radiusX = w * 0.048 * (0.45 + curlA * 0.9 + curlB * 1.25);
+      const radiusY = h * 0.24 * waist * (1 + 0.08 * Math.sin(theta + t * Math.PI * 2));
+      const radiusX = w * 0.046 * (0.45 + curlA * 0.85 + curlB * 1.15);
 
-      // 3D cross-section + perspective projection
+      // 3D cross-section + safe perspective projection
       const ry = u * radiusY * Math.cos(twist);
       const rz = u * radiusY * Math.sin(twist);
       const rx =
-        u * radiusX * Math.sin(twist * 1.12) -
-        curlA * u * (w * 0.025) * Math.sin(t * 8 - time * 0.45) -
-        curlB * Math.cos(u * 2.0 + time * 0.38) * (w * 0.036);
+        u * radiusX * Math.sin(twist) -
+        curlA * u * (w * 0.022) * Math.sin(t * 7 - theta) -
+        curlB * Math.cos(u * 2.0 + theta) * (w * 0.032);
 
-      const persp = 1 / (1 - rz * 0.0012);
+      const persp = 1 / Math.max(0.68, Math.min(1.45, 1 - rz * 0.0011));
       const ripple =
         h *
-        0.042 *
-        Math.sin(t * Math.PI * 3.1 + u * 1.45 - time * 0.58) *
+        0.036 *
+        Math.sin(t * Math.PI * 3.0 + u * 1.4 - theta * 2) *
         (1 - 0.3 * Math.abs(u));
 
       const pInf = Math.sin(t * Math.PI);
-      const px = pointerX * 22 * pInf * (0.4 + 0.6 * Math.abs(u));
-      const py = pointerY * 26 * pInf * (1 - 0.25 * u);
+      const px = pointerX * 20 * pInf * (0.4 + 0.6 * Math.abs(u));
+      const py = pointerY * 22 * pInf * (1 - 0.25 * u);
 
       pts.push({
         x: spineX + rx * persp + px,
         y: spineY + (ry + ripple) * persp + py,
       });
     } else if (cfg.mode === 'banner3d') {
-      const wave = Math.sin(t * Math.PI * 2.3 - time * 0.62);
+      const wave = Math.sin(t * Math.PI * 2.3 - theta * 2);
       const spineX = -w * 0.05 + t * w * 1.12;
       const spineY =
         h * 0.65 -
         Math.sin(t * Math.PI * 1.35 - 0.15) * (h * 0.26) -
         t * h * 0.12 +
-        14 * wave * Math.sin(t * Math.PI);
+        12 * wave * Math.sin(t * Math.PI);
 
-      const pinch = 0.5 + 0.07 * Math.sin(time * 0.38);
+      const pinch = 0.5 + 0.06 * Math.sin(theta);
       const waist = 0.26 + 0.74 * Math.pow(Math.abs(t - pinch) * 1.85, 1.2);
       const twist =
         t * Math.PI * 2.05 +
-        time * 0.54 +
-        0.75 * Math.sin(t * Math.PI * 1.8 - time * 0.42) +
-        u * 0.38 * Math.sin(t * Math.PI + time * 0.3);
+        theta +
+        0.65 * Math.sin(t * Math.PI * 1.8 - theta) +
+        u * 0.34 * Math.sin(t * Math.PI + theta);
 
       const curl = Math.exp(-Math.pow((t - 0.68) / 0.14, 2));
       const ry =
         u * (h * 0.34 * waist) * Math.cos(twist) +
-        curl * Math.sin(u * 1.8 + time * 0.42) * (h * 0.1);
+        curl * Math.sin(u * 1.8 + theta) * (h * 0.08);
       const rz = u * (h * 0.34 * waist) * Math.sin(twist);
       const rx =
-        u * (w * 0.042 * (0.35 + curl)) * Math.sin(twist) -
-        curl * Math.cos(u * 1.8 + time * 0.42) * (w * 0.025);
+        u * (w * 0.04 * (0.35 + curl)) * Math.sin(twist) -
+        curl * Math.cos(u * 1.8 + theta) * (w * 0.022);
 
-      const persp = 1 / (1 - rz * 0.0022);
+      const persp = 1 / Math.max(0.68, Math.min(1.45, 1 - rz * 0.002));
       const pInf = Math.sin(t * Math.PI);
 
       pts.push({
@@ -216,30 +221,30 @@ function computeStrandPath(
         y: spineY + ry * persp + pointerY * 14 * pInf,
       });
     } else {
-      // Vertical 3D ribbon for the Dashboard card panel
-      const wave = Math.sin(t * Math.PI * 2.4 - time * 0.6);
+      // Vertical 3D ribbon for the Dashboard profile card panel (seamless periodic loop)
+      const wave = Math.sin(t * Math.PI * 2.2 - theta * 2);
       const spineY = -h * 0.06 + t * h * 1.12;
       const spineX =
         w * 0.5 +
-        Math.sin(t * Math.PI * 1.55 + 0.45) * (w * 0.22) +
-        14 * wave * Math.sin(t * Math.PI);
+        Math.sin(t * Math.PI * 1.55 + 0.45) * (w * 0.2) +
+        11 * wave * Math.sin(t * Math.PI);
 
-      const pinch = 0.48 + 0.07 * Math.sin(time * 0.36);
-      const waist = 0.24 + 0.76 * Math.pow(Math.abs(t - pinch) * 1.85, 1.2);
+      const pinch = 0.48 + 0.06 * Math.sin(theta);
+      const waist = 0.26 + 0.74 * Math.pow(Math.abs(t - pinch) * 1.85, 1.2);
       const twist =
-        t * Math.PI * 2.25 +
-        time * 0.52 +
-        0.78 * Math.sin(t * Math.PI * 1.8 - time * 0.4) +
-        u * 0.4 * Math.sin(t * Math.PI + time * 0.32);
+        t * Math.PI * 2.2 +
+        theta +
+        0.62 * Math.sin(t * Math.PI * 1.6 - theta) +
+        u * 0.32 * Math.sin(t * Math.PI + theta);
 
       const curl = Math.exp(-Math.pow((t - 0.62) / 0.15, 2));
       const rx =
-        u * (w * 0.44 * waist) * Math.cos(twist) +
-        curl * Math.sin(u * 1.9 + time * 0.4) * (w * 0.11);
-      const rz = u * (w * 0.44 * waist) * Math.sin(twist);
-      const ry = u * (h * 0.045 * (0.4 + curl)) * Math.sin(twist);
+        u * (w * 0.42 * waist) * Math.cos(twist) +
+        curl * Math.sin(u * 1.8 + theta) * (w * 0.09);
+      const rz = u * (w * 0.42 * waist) * Math.sin(twist);
+      const ry = u * (h * 0.04 * (0.4 + curl)) * Math.sin(twist);
 
-      const persp = 1 / (1 - rz * 0.0024);
+      const persp = 1 / Math.max(0.68, Math.min(1.45, 1 - rz * 0.002));
       const pInf = Math.sin(t * Math.PI);
 
       pts.push({
@@ -262,7 +267,6 @@ export const StrandCanvas: React.FC<StrandCanvasProps> = ({
   const cfg = VARIANT_CONFIGS[variant];
   const containerRef = useRef<HTMLDivElement | null>(null);
   const pathRefs = useRef<(SVGPathElement | null)[]>([]);
-  const [drawn, setDrawn] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -300,20 +304,6 @@ export const StrandCanvas: React.FC<StrandCanvasProps> = ({
   );
 
   useEffect(() => {
-    const prefersReduced =
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
-    if (prefersReduced) {
-      setDrawn(true);
-      return;
-    }
-
-    const frame = requestAnimationFrame(() => setDrawn(true));
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const reducedQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)');
@@ -323,7 +313,8 @@ export const StrandCanvas: React.FC<StrandCanvasProps> = ({
 
     let rafId = 0;
     let isVisible = true;
-    const startTime = performance.now();
+    let prevNow = performance.now();
+    let accumulatedSec = 0;
     let lastDrawTime = 0;
     let targetPx = 0;
     let targetPy = 0;
@@ -367,6 +358,8 @@ export const StrandCanvas: React.FC<StrandCanvasProps> = ({
     const minFrameIntervalMs = lightweightMobile && isMobile ? 42 : 0;
 
     const tick = (now: number) => {
+      const dtSec = Math.min(0.05, Math.max(0, (now - prevNow) / 1000));
+      prevNow = now;
       const shouldSkipForThrottle = minFrameIntervalMs > 0 && now - lastDrawTime < minFrameIntervalMs;
 
       if (
@@ -376,17 +369,17 @@ export const StrandCanvas: React.FC<StrandCanvasProps> = ({
         !shouldSkipForThrottle
       ) {
         lastDrawTime = now;
-        const elapsedSec = (now - startTime) / 1000;
+        accumulatedSec = (accumulatedSec + dtSec) % LOOP_PERIOD_SEC;
 
-        currentPx += (targetPx - currentPx) * 0.04;
-        currentPy += (targetPy - currentPy) * 0.04;
+        currentPx += (targetPx - currentPx) * 0.06;
+        currentPy += (targetPy - currentPy) * 0.06;
 
         for (let i = 0; i < strandMeta.length; i++) {
           const node = pathRefs.current[i];
           if (node) {
             node.setAttribute(
               'd',
-              computeStrandPath(cfg, strandMeta[i].u, elapsedSec, currentPx, currentPy),
+              computeStrandPath(cfg, strandMeta[i].u, accumulatedSec, currentPx, currentPy),
             );
           }
         }
@@ -427,16 +420,10 @@ export const StrandCanvas: React.FC<StrandCanvasProps> = ({
                 pathRefs.current[idx] = node;
               }}
               d={d}
-              pathLength={1}
               stroke="var(--strand-color)"
               strokeWidth={cfg.strokeWidth}
               strokeOpacity={meta.opacity}
               strokeLinecap="round"
-              style={{
-                strokeDasharray: 1,
-                strokeDashoffset: drawn ? 0 : 1,
-                transition: `stroke-dashoffset 1700ms cubic-bezier(0.22, 1, 0.36, 1) ${meta.delayMs}ms`,
-              }}
             />
           );
         })}
