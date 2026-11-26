@@ -54,6 +54,7 @@ export const EducationPage: React.FC = () => {
   const [docSearch, setDocSearch] = useState('');
   const [docCategoryFilter, setDocCategoryFilter] = useState<DocumentCategory | 'all'>('all');
   const [docSort, setDocSort] = useState<'newest' | 'oldest' | 'title'>('newest');
+  const [docsGridOpen, setDocsGridOpen] = useState(false);
   const [uploadPanelOpen, setUploadPanelOpen] = useState(false);
   const [togglingDocId, setTogglingDocId] = useState<string | null>(null);
   const [openDocMenuId, setOpenDocMenuId] = useState<string | null>(null);
@@ -774,17 +775,43 @@ export const EducationPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 2-Column Document Card Grid */}
-        {filteredDocuments.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[var(--border-medium)] bg-[var(--bg-main)]/50 px-6 py-10 text-center">
-            <p className="text-sm text-[var(--text-secondary)]">
-              {documents.length === 0
-                ? 'No documents uploaded yet. Click "Upload Document" above to add your first marksheet or certificate.'
-                : 'No documents match your search or category filter.'}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {/* Collapsible View Dropdown for the 2-Column Document Cards */}
+        <div className="space-y-4">
+          <button
+            type="button"
+            aria-expanded={docsGridOpen}
+            aria-controls="academic-documents-grid"
+            onClick={() => setDocsGridOpen((prev) => !prev)}
+            className="flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--border-medium)] bg-[var(--bg-main)] px-4 py-3 text-left text-sm transition-colors hover:border-[var(--text-primary)] cursor-pointer"
+          >
+            <span className="flex items-center gap-2.5">
+              <Eye className="h-4 w-4 text-[var(--text-secondary)]" />
+              <span className="font-medium text-[var(--text-primary)]">
+                {docsGridOpen ? 'Hide Documents' : 'View Documents'}
+              </span>
+              <span className="font-mono text-xs text-[var(--text-secondary)]">
+                ({filteredDocuments.length})
+              </span>
+            </span>
+            <ChevronDown
+              className={`h-4 w-4 text-[var(--text-secondary)] transition-transform duration-200 ${
+                docsGridOpen ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+
+          {docsGridOpen && (
+            <div id="academic-documents-grid">
+              {filteredDocuments.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-[var(--border-medium)] bg-[var(--bg-main)]/50 px-6 py-10 text-center">
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    {documents.length === 0
+                      ? 'No documents uploaded yet. Click "Upload Document" above to add your first marksheet or certificate.'
+                      : 'No documents match your search or category filter.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {filteredDocuments.map((doc) => {
               const isSelected = Boolean(doc.show_in_education);
               const isToggling = togglingDocId === doc.id;
@@ -998,8 +1025,11 @@ export const EducationPage: React.FC = () => {
                 </article>
               );
             })}
-          </div>
-        )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </section>
 
       <EducationFormModal
