@@ -1,16 +1,17 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
+import { isProfileComplete, PROFILE_CREATION_ROUTE } from '@/app/profileCompletion';
 import { LoadingState } from '@/design/components/EditorialStates';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requireUsername?: boolean;
+  requireProfileComplete?: boolean;
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
-  requireUsername = true,
+  requireProfileComplete = true,
 }) => {
   const { user, isAuthenticated, isInitializing } = useAuth();
   const location = useLocation();
@@ -29,8 +30,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/auth/login" state={{ from: location.pathname }} replace />;
   }
 
-  if (requireUsername && !user.slug) {
-    return <Navigate to="/onboarding/username" state={{ from: location.pathname }} replace />;
+  if (requireProfileComplete && !isProfileComplete(user)) {
+    return <Navigate to={PROFILE_CREATION_ROUTE} state={{ from: location.pathname }} replace />;
   }
 
   return <>{children}</>;

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight, RefreshCw } from 'lucide-react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
+import { isProfileComplete, PROFILE_CREATION_ROUTE } from '@/app/profileCompletion';
 import { PillButton } from '@/design/components/PillButton';
 import { consumeOAuthTransaction } from '@/services/api/oauth';
 import { ApiClientError } from '@/services/http';
@@ -57,9 +58,13 @@ export const OAuthCallbackPage: React.FC = () => {
       let active = true;
       const { promise, redirectTo } = inFlightRef.current;
       promise
-        .then(() => {
+        .then((oauthUser) => {
           if (!active) return;
-          navigate(redirectTo, { replace: true });
+          const completed = isProfileComplete(oauthUser);
+          navigate(completed ? redirectTo : PROFILE_CREATION_ROUTE, {
+            replace: true,
+            state: completed ? undefined : { from: redirectTo },
+          });
         })
         .catch((err) => {
           if (!active) return;
@@ -111,9 +116,13 @@ export const OAuthCallbackPage: React.FC = () => {
 
     let active = true;
     promise
-      .then(() => {
+      .then((oauthUser) => {
         if (!active) return;
-        navigate(redirectTo, { replace: true });
+        const completed = isProfileComplete(oauthUser);
+        navigate(completed ? redirectTo : PROFILE_CREATION_ROUTE, {
+          replace: true,
+          state: completed ? undefined : { from: redirectTo },
+        });
       })
       .catch((err) => {
         if (!active) return;

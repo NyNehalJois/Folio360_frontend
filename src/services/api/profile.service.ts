@@ -1,6 +1,7 @@
 import { httpClient } from '@/services/http';
 import type {
   Completeness,
+  InitialProfilePayload,
   Preferences,
   Profile,
   ProfileUpdate,
@@ -35,6 +36,18 @@ export const profileService = {
 
   updateSlug(slug: string): Promise<Profile> {
     return httpClient.patch<Profile>('/profile/me/slug', { slug });
+  },
+
+  async completeInitialProfile(payload: InitialProfilePayload): Promise<Profile> {
+    await httpClient.patch<Profile>('/profile/me/slug', { slug: payload.slug });
+    return httpClient.patch<Profile>('/profile/me', {
+      full_name: payload.full_name,
+      date_of_birth: payload.date_of_birth,
+      bio: payload.bio ?? null,
+      interests: payload.interests ?? [],
+      current_activities: payload.current_activities ?? [],
+      profile_completed: true,
+    });
   },
 
   getVisibility(): Promise<PublicSettings> {

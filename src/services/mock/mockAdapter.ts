@@ -196,6 +196,7 @@ function getOrCreateProfile(user: CurrentUser): Profile {
     slug: user.slug,
     public_url: user.slug ? `https://folio360.in/@${user.slug}` : '',
     full_name: user.full_name,
+    date_of_birth: null,
     headline: null,
     bio: null,
     avatar_url: user.avatar_url,
@@ -205,6 +206,8 @@ function getOrCreateProfile(user: CurrentUser): Profile {
     website: null,
     links: { other: [] },
     interests: [],
+    current_activities: [],
+    profile_completed: Boolean(user.profile_completed),
     updated_at: new Date().toISOString(),
   };
   mockProfiles.set(user.id, fresh);
@@ -332,6 +335,7 @@ async function handleMockRequest(
       avatar_url: null,
       has_password: true,
       linked_providers: [],
+      profile_completed: false,
       created_at: new Date().toISOString(),
     };
 
@@ -559,8 +563,19 @@ async function handleMockRequest(
     };
     mockProfiles.set(acct.user.id, updated);
     saveMockProfiles(mockProfiles);
-    if (patch.full_name && patch.full_name !== acct.user.full_name) {
-      acct.user = { ...acct.user, full_name: patch.full_name };
+    if (
+      (patch.full_name && patch.full_name !== acct.user.full_name) ||
+      (typeof patch.profile_completed === 'boolean' &&
+        patch.profile_completed !== acct.user.profile_completed)
+    ) {
+      acct.user = {
+        ...acct.user,
+        full_name: patch.full_name ?? acct.user.full_name,
+        profile_completed:
+          typeof patch.profile_completed === 'boolean'
+            ? patch.profile_completed
+            : acct.user.profile_completed,
+      };
       saveMockAccounts(mockAccounts);
     }
     return updated;

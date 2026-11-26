@@ -130,6 +130,8 @@ export interface CurrentUser {
   avatar_url: string | null;
   has_password: boolean;
   linked_providers: OAuthProvider[];
+  /** Backend contract dependency: indicates whether first-time profile setup is completed */
+  profile_completed?: boolean;
   created_at: Timestamp;
 }
 
@@ -190,11 +192,31 @@ export interface ProfileLinkItem {
   url: string;
 }
 
+export type ActivityCategory =
+  | 'studying'
+  | 'working'
+  | 'interning'
+  | 'freelancing'
+  | 'job_seeking'
+  | 'researching'
+  | 'building_project'
+  | 'learning_skills'
+  | 'other';
+
+export interface CurrentActivityItem {
+  key: ActivityCategory;
+  /** Custom label when key === 'other' */
+  label?: string | null;
+  description?: string | null;
+}
+
 export interface Profile {
   user_id: UUID;
   slug: string;
   public_url: string;
   full_name: string;
+  /** Backend contract dependency: YYYY-MM-DD required during first-time profile creation */
+  date_of_birth?: DateString | null;
   headline: string | null;
   bio: string | null;
   avatar_url: string | null;
@@ -208,12 +230,25 @@ export interface Profile {
     other: ProfileLinkItem[];
   };
   interests: string[];
+  /** Backend contract dependency: multi-select current activities with optional descriptions */
+  current_activities?: CurrentActivityItem[];
+  /** Backend contract dependency: server-authoritative onboarding completion flag */
+  profile_completed?: boolean;
   updated_at: Timestamp;
 }
 
 export type ProfileUpdate = Partial<
   Omit<Profile, 'user_id' | 'slug' | 'public_url' | 'avatar_url' | 'updated_at'>
 >;
+
+export interface InitialProfilePayload {
+  full_name: string;
+  slug: string;
+  date_of_birth: DateString;
+  bio?: string | null;
+  interests?: string[];
+  current_activities?: CurrentActivityItem[];
+}
 
 export interface PublicSettings {
   public_enabled: boolean;

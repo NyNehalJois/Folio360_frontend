@@ -7,7 +7,6 @@ import { LoginPage } from '@/features/auth/LoginPage';
 import { OAuthCallbackPage } from '@/features/auth/OAuthCallbackPage';
 import { ForgotPasswordPage, ResetPasswordPage } from '@/features/auth/PasswordResetPages';
 import { RegisterPage } from '@/features/auth/RegisterPage';
-import { UsernameOnboardingPage } from '@/features/auth/UsernameOnboardingPage';
 import {
   VerificationFailedPage,
   VerificationSentPage,
@@ -17,6 +16,7 @@ import {
 import { EducationPage } from '@/features/education/EducationPage';
 import { HomePage } from '@/features/home/HomePage';
 import { OverviewPage } from '@/features/overview/OverviewPage';
+import { ProfileCreationPage } from '@/features/profile/ProfileCreationPage';
 import { ProfilePage } from '@/features/profile/ProfilePage';
 import { PublicProfilePage } from '@/features/profile/PublicProfilePage';
 import { ModuleScaffoldPage } from '@/features/workspace/ModuleScaffoldPage';
@@ -48,12 +48,16 @@ export const App: React.FC = () => {
             <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
             <Route path="/auth/callback" element={<OAuthCallbackPage />} />
             <Route
-              path="/onboarding/username"
+              path="/onboarding/profile"
               element={
-                <ProtectedRoute requireUsername={false}>
-                  <UsernameOnboardingPage />
+                <ProtectedRoute requireProfileComplete={false}>
+                  <ProfileCreationPage />
                 </ProtectedRoute>
               }
+            />
+            <Route
+              path="/onboarding/username"
+              element={<Navigate to="/onboarding/profile" replace />}
             />
 
             <Route

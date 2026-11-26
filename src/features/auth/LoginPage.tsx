@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
+import { isProfileComplete, PROFILE_CREATION_ROUTE } from '@/app/profileCompletion';
 import { PillButton } from '@/design/components/PillButton';
 import { authService } from '@/services/api';
 import { API_CONFIG } from '@/services/config';
@@ -32,7 +33,7 @@ export const LoginPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
 
   if (!isInitializing && isAuthenticated) {
-    return <Navigate to={user?.slug ? from : '/onboarding/username'} replace />;
+    return <Navigate to={isProfileComplete(user) ? from : PROFILE_CREATION_ROUTE} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,9 +53,10 @@ export const LoginPage: React.FC = () => {
     setSubmitting(true);
     try {
       const signedInUser = await login(email.trim(), password);
-      navigate(signedInUser.slug ? from : '/onboarding/username', {
+      const completed = isProfileComplete(signedInUser);
+      navigate(completed ? from : PROFILE_CREATION_ROUTE, {
         replace: true,
-        state: signedInUser.slug ? undefined : { from },
+        state: completed ? undefined : { from },
       });
     } catch (err) {
       if (err instanceof ApiClientError) {

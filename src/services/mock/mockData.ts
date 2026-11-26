@@ -26,6 +26,7 @@ export const MOCK_USER: CurrentUser = {
   avatar_url: null,
   has_password: true,
   linked_providers: ['github'],
+  profile_completed: true,
   created_at: '2026-09-01T08:30:00Z',
 };
 
@@ -34,6 +35,7 @@ export const MOCK_PROFILE: Profile = {
   slug: 'alex_mercer',
   public_url: 'https://folio360.in/@alex_mercer',
   full_name: 'Alex Mercer',
+  date_of_birth: '2004-05-14',
   headline: 'CSE Student · Developer · Systems & Design',
   bio: 'Computer Science student passionate about building scalable systems, clean editorial interfaces, and meaningful digital products.',
   avatar_url: null,
@@ -47,6 +49,11 @@ export const MOCK_PROFILE: Profile = {
     other: [],
   },
   interests: ['Distributed Systems', 'Human-Centered UI', 'Developer Tooling'],
+  current_activities: [
+    { key: 'studying', description: 'Pursuing B.E. in Computer Science & Engineering' },
+    { key: 'building_project', description: 'Developing Folio360 academic portfolio platform' },
+  ],
+  profile_completed: true,
   updated_at: '2026-11-16T18:10:00Z',
 };
 
