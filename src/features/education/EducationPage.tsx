@@ -13,10 +13,13 @@ import {
   Landmark,
   Lock,
   MapPin,
+  MoreVertical,
   Pencil,
   Plus,
   Search,
+  Sparkles,
   Trash2,
+  Upload,
 } from 'lucide-react';
 import { EmptyState, ErrorState, LoadingState } from '@/design/components/EditorialStates';
 import { PillButton } from '@/design/components/PillButton';
@@ -50,27 +53,24 @@ export const EducationPage: React.FC = () => {
 
   const [docSearch, setDocSearch] = useState('');
   const [docCategoryFilter, setDocCategoryFilter] = useState<DocumentCategory | 'all'>('all');
-  const [docsVaultOpen, setDocsVaultOpen] = useState(false);
+  const [docSort, setDocSort] = useState<'newest' | 'oldest' | 'title'>('newest');
+  const [uploadPanelOpen, setUploadPanelOpen] = useState(false);
   const [togglingDocId, setTogglingDocId] = useState<string | null>(null);
   const [openDocMenuId, setOpenDocMenuId] = useState<string | null>(null);
   const [confirmDeleteDocId, setConfirmDeleteDocId] = useState<string | null>(null);
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!openDocMenuId && !docsVaultOpen) return;
+    if (!openDocMenuId) return;
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
-      if (openDocMenuId && !target?.closest('[data-doc-visibility-menu]')) {
+      if (!target?.closest('[data-doc-visibility-menu]')) {
         setOpenDocMenuId(null);
-      }
-      if (docsVaultOpen && !target?.closest('[data-docs-vault-dropdown]')) {
-        setDocsVaultOpen(false);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setOpenDocMenuId(null);
-        setDocsVaultOpen(false);
       }
     };
     document.addEventListener('mousedown', handlePointerDown);
@@ -79,7 +79,7 @@ export const EducationPage: React.FC = () => {
       document.removeEventListener('mousedown', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [openDocMenuId, docsVaultOpen]);
+  }, [openDocMenuId]);
 
   const [actionBanner, setActionBanner] = useState<{
     tone: 'success' | 'error';
@@ -123,25 +123,27 @@ export const EducationPage: React.FC = () => {
     [sortedRecords],
   );
 
-  const displayedEducationDocs = useMemo(
-    () => documents.filter((doc) => Boolean(doc.show_in_education)),
-    [documents],
-  );
-
   const filteredDocuments = useMemo(() => {
     const q = docSearch.trim().toLowerCase();
-    return documents.filter((doc) => {
+    const list = documents.filter((doc) => {
       if (docCategoryFilter !== 'all' && doc.category !== docCategoryFilter) return false;
       if (
         q &&
         !doc.title.toLowerCase().includes(q) &&
-        !doc.original_filename.toLowerCase().includes(q)
+        !doc.original_filename.toLowerCase().includes(q) &&
+        !(doc.notes ?? '').toLowerCase().includes(q)
       ) {
         return false;
       }
       return true;
     });
-  }, [documents, docSearch, docCategoryFilter]);
+    return [...list].sort((a, b) => {
+      if (docSort === 'title') return a.title.localeCompare(b.title);
+      const timeA = new Date(a.uploaded_at).getTime();
+      const timeB = new Date(b.uploaded_at).getTime();
+      return docSort === 'oldest' ? timeA - timeB : timeB - timeA;
+    });
+  }, [documents, docSearch, docCategoryFilter, docSort]);
 
   const openCreateModal = () => {
     setEditingRecord(null);
@@ -670,280 +672,308 @@ export const EducationPage: React.FC = () => {
         </section>
       )}
 
-      {/* Documents Selected to Display in Education Tab */}
-      <section
-        aria-label="Documents displayed in education tab"
-        className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-6"
-      >
-        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--border-subtle)] pb-3">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">
-              EDUCATION TAB DISPLAY
-            </p>
-            <h2 className="mt-1 font-serif text-2xl text-[var(--text-primary)]">
-              Selected Documents in Education Tab ({displayedEducationDocs.length})
-            </h2>
-          </div>
-          <span className="font-mono text-[11px] text-[var(--text-secondary)]">
-            Toggle below to choose which documents appear here and on /@username
-          </span>
-        </div>
-
-        {displayedEducationDocs.length === 0 ? (
-          <p className="mt-4 text-sm text-[var(--text-secondary)]">
-            No documents selected for the Education tab yet. Use &ldquo;Show in Education tab&rdquo;
-            in the Document Vault below to display uploaded marksheets or certificates here.
-          </p>
-        ) : (
-          <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {displayedEducationDocs.map((doc) => (
-              <li
-                key={doc.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-main)] px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-[var(--text-primary)]">
-                    {doc.title}
-                  </p>
-                  <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--text-secondary)]">
-                    {formatDocumentCategory(doc.category)} · {formatFileSize(doc.size_bytes)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={togglingDocId === doc.id}
-                  onClick={() => void handleSetDocumentDisplay(doc, false)}
-                  className="shrink-0 rounded-full border border-[var(--border-medium)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--text-secondary)] hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] cursor-pointer"
-                >
-                  Hide
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* Scrolled-Down Document Vault Inside Education */}
+      {/* Scrolled-Down Academic Documents Section (Image 1 Editorial Card Grid) */}
       <section
         id="education-documents"
         aria-labelledby="education-documents-heading"
-        className="space-y-6 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-6"
+        className="space-y-6 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-6 sm:p-7"
       >
-        <div className="border-b border-[var(--border-subtle)] pb-4">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">
-            DOCUMENT VAULT
-          </p>
-          <h2
-            id="education-documents-heading"
-            className="mt-1 font-serif text-2xl text-[var(--text-primary)]"
-          >
-            Uploaded Documents ({documents.length})
-          </h2>
-          <p className="mt-1 text-xs text-[var(--text-secondary)]">
-            Upload marksheets, transcripts, and certificates here, then select which ones to
-            display in your Education tab.
-          </p>
-        </div>
-
-        {/* Upload New Document */}
-        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)]/50 p-4">
-          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-3">
-            Upload New Document
-          </p>
-          <DocumentUploadWidget
-            onUploaded={(doc) => {
-              setDocuments((prev) => [doc, ...prev]);
-              setActionBanner({
-                tone: 'success',
-                message: `Uploaded "${doc.title}" to your Academic Vault.`,
-              });
-            }}
-          />
-        </div>
-
-        {/* Collapsible Dropdown for Uploaded Documents */}
-        <div className="relative" data-docs-vault-dropdown>
-          <button
-            type="button"
-            aria-expanded={docsVaultOpen}
-            aria-controls="uploaded-documents-dropdown-panel"
-            onClick={() => setDocsVaultOpen((prev) => !prev)}
-            className="flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--border-medium)] bg-[var(--bg-main)] px-4 py-3 text-left text-sm transition-colors hover:border-[var(--text-primary)] cursor-pointer"
-          >
-            <span className="flex items-center gap-2.5">
-              <FileText className="h-4 w-4 text-[var(--text-secondary)]" />
-              <span className="font-medium text-[var(--text-primary)]">
-                {docsVaultOpen ? 'Uploaded Documents' : 'View Uploaded Documents'}
-              </span>
-              <span className="font-mono text-xs text-[var(--text-secondary)]">
-                ({documents.length})
-              </span>
-            </span>
-            <ChevronDown
-              className={`h-4 w-4 text-[var(--text-secondary)] transition-transform duration-200 ${
-                docsVaultOpen ? 'rotate-180' : ''
-              }`}
-            />
-          </button>
-
-          {docsVaultOpen && (
-            <div
-              id="uploaded-documents-dropdown-panel"
-              className="mt-2 space-y-4 rounded-xl border border-[var(--border-medium)] bg-[var(--bg-main)] p-4 shadow-lg"
+        {/* Top Row: Eyebrow + Heading + AI Processing Pill + Upload Document Button */}
+        <div className="flex flex-col gap-4 border-b border-[var(--border-subtle)] pb-5 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+              EDUCATION DOCUMENTS
+            </p>
+            <h2
+              id="education-documents-heading"
+              className="mt-1.5 font-serif text-3xl text-[var(--text-primary)]"
             >
-              {/* Search & Category Filter */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative flex-1 max-w-sm">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-secondary)]" />
-                  <input
-                    type="search"
-                    value={docSearch}
-                    onChange={(e) => setDocSearch(e.target.value)}
-                    placeholder="Search uploaded documents…"
-                    className="w-full rounded-full border border-[var(--border-medium)] bg-[var(--surface-elevated)] py-2 pl-9 pr-4 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:border-[var(--text-primary)] focus:outline-none"
-                  />
-                </div>
+              Your Academic Documents
+            </h2>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              Manage and view your educational documents. Upload marksheets, transcripts,
+              certificates and more.
+            </p>
+          </div>
 
-                <select
-                  aria-label="Filter documents by category"
-                  value={docCategoryFilter}
-                  onChange={(e) => setDocCategoryFilter(e.target.value as DocumentCategory | 'all')}
-                  className="rounded-full border border-[var(--border-medium)] bg-[var(--surface-elevated)] px-3.5 py-2 text-xs text-[var(--text-primary)] focus:border-[var(--text-primary)] focus:outline-none"
-                >
-                  <option value="all">All categories</option>
-                  {DOCUMENT_CATEGORY_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-main)] px-3 py-1.5 text-[11px] font-medium text-[var(--text-secondary)]">
+              <Sparkles className="h-3 w-3 text-[var(--accent)]" />
+              AI-Powered Document Processing
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            </span>
 
-              {/* Document List with "Display in Education tab" Selector */}
-              {filteredDocuments.length === 0 ? (
-                <p className="py-6 text-center text-sm text-[var(--text-secondary)]">
-                  {documents.length === 0
-                    ? 'No documents uploaded yet. Upload your first marksheet or certificate above.'
-                    : 'No documents match your current filter.'}
-                </p>
-              ) : (
-                <ul className="divide-y divide-[var(--border-subtle)]">
+            <PillButton
+              variant="primary"
+              size="md"
+              onClick={() => setUploadPanelOpen((prev) => !prev)}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              {uploadPanelOpen ? 'Close Upload' : 'Upload Document'}
+            </PillButton>
+          </div>
+        </div>
+
+        {/* Toggleable Upload Drawer */}
+        {uploadPanelOpen && (
+          <div className="rounded-xl border border-[var(--border-medium)] bg-[var(--surface-muted)]/60 p-4">
+            <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+              Upload New Academic Document
+            </p>
+            <DocumentUploadWidget
+              onUploaded={(doc) => {
+                setDocuments((prev) => [doc, ...prev]);
+                setUploadPanelOpen(false);
+                setActionBanner({
+                  tone: 'success',
+                  message: `Uploaded "${doc.title}" to Your Academic Documents.`,
+                });
+              }}
+            />
+          </div>
+        )}
+
+        {/* Search, Category Filter & Sort Row */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex-1 max-w-md">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-secondary)]" />
+            <input
+              type="search"
+              value={docSearch}
+              onChange={(e) => setDocSearch(e.target.value)}
+              placeholder="Search your documents..."
+              className="w-full rounded-full border border-[var(--border-medium)] bg-[var(--bg-main)] py-2 pl-9 pr-4 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:border-[var(--text-primary)] focus:outline-none"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <select
+              aria-label="Filter documents by category"
+              value={docCategoryFilter}
+              onChange={(e) => setDocCategoryFilter(e.target.value as DocumentCategory | 'all')}
+              className="rounded-full border border-[var(--border-medium)] bg-[var(--bg-main)] px-3.5 py-2 text-xs text-[var(--text-primary)] focus:border-[var(--text-primary)] focus:outline-none cursor-pointer"
+            >
+              <option value="all">All Categories</option>
+              {DOCUMENT_CATEGORY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              aria-label="Sort documents"
+              value={docSort}
+              onChange={(e) => setDocSort(e.target.value as 'newest' | 'oldest' | 'title')}
+              className="rounded-full border border-[var(--border-medium)] bg-[var(--bg-main)] px-3.5 py-2 text-xs text-[var(--text-primary)] focus:border-[var(--text-primary)] focus:outline-none cursor-pointer"
+            >
+              <option value="newest">Sort by: Newest</option>
+              <option value="oldest">Sort by: Oldest</option>
+              <option value="title">Sort by: Title A–Z</option>
+            </select>
+          </div>
+        </div>
+
+        {/* 2-Column Document Card Grid */}
+        {filteredDocuments.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-[var(--border-medium)] bg-[var(--bg-main)]/50 px-6 py-10 text-center">
+            <p className="text-sm text-[var(--text-secondary)]">
+              {documents.length === 0
+                ? 'No documents uploaded yet. Click "Upload Document" above to add your first marksheet or certificate.'
+                : 'No documents match your search or category filter.'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {filteredDocuments.map((doc) => {
               const isSelected = Boolean(doc.show_in_education);
               const isToggling = togglingDocId === doc.id;
               const isConfirmingDocDelete = confirmDeleteDocId === doc.id;
               const isDeletingDoc = deletingDocId === doc.id;
+              const uploadedLabel = new Date(doc.uploaded_at).toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              });
+              const programLabel =
+                doc.attached_to?.[0]?.label ||
+                (primarySummary
+                  ? `${primarySummary.degree}${primarySummary.branch ? ' CSE' : ''}`
+                  : 'Academic Vault');
+              const summaryText =
+                doc.notes ||
+                `${formatDocumentCategory(doc.category)} uploaded as ${doc.original_filename}. ${
+                  isSelected
+                    ? 'Visible in your Education tab.'
+                    : 'Stored privately in your academic vault.'
+                }`;
 
               return (
-                <li key={doc.id} className="py-4 first:pt-0 last:pb-0">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-[var(--text-primary)]">
+                <article
+                  key={doc.id}
+                  className="flex flex-col justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-main)] p-4 transition-colors hover:border-[var(--border-medium)]"
+                >
+                  {/* Card Top: Title + Category + Thumbnail */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <FileText className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
+                        <h3 className="truncate text-sm font-semibold text-[var(--text-primary)]">
                           {doc.title}
+                        </h3>
+                        <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-2.5 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]">
+                          {formatDocumentCategory(doc.category)}
+                        </span>
+                      </div>
+
+                      <div className="mt-3">
+                        <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-primary)]">
+                          <Sparkles className="h-3 w-3 text-[var(--accent)]" />
+                          AI Generated Description
                         </p>
-                        <p className="mt-0.5 truncate font-mono text-[11px] text-[var(--text-secondary)]">
-                          {formatDocumentCategory(doc.category)} · {doc.original_filename} ·{' '}
+                        <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-[var(--text-secondary)]">
+                          {summaryText}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Document Miniature Preview */}
+                    <div className="hidden sm:flex h-24 w-24 shrink-0 flex-col justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-2 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="h-2 w-2 rounded-full bg-[var(--accent)]/60" />
+                        <span className="font-mono text-[7px] uppercase tracking-wider text-[var(--text-secondary)]">
+                          {doc.mime_type === 'application/pdf' ? 'PDF' : 'IMG'}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="h-1 w-full rounded bg-[var(--border-medium)]" />
+                        <div className="h-1 w-4/5 rounded bg-[var(--border-subtle)]" />
+                        <div className="h-1 w-full rounded bg-[var(--border-subtle)]" />
+                        <div className="h-1 w-3/5 rounded bg-[var(--border-subtle)]" />
+                      </div>
+                      <p className="truncate font-mono text-[7px] text-[var(--text-secondary)]">
+                        {doc.original_filename}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Card Footer: Uploaded on · Program · Size + 3-dot Menu */}
+                  <div className="mt-4 flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-3">
+                    <div className="grid flex-1 grid-cols-3 gap-2 text-[10px] text-[var(--text-secondary)]">
+                      <div className="min-w-0">
+                        <span className="flex items-center gap-1 opacity-80">
+                          <Calendar className="h-3 w-3 shrink-0" />
+                          Uploaded on
+                        </span>
+                        <p className="mt-0.5 truncate font-medium text-[var(--text-primary)]">
+                          {uploadedLabel}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <span className="flex items-center gap-1 opacity-80">
+                          <GraduationCap className="h-3 w-3 shrink-0" />
+                          Program
+                        </span>
+                        <p className="mt-0.5 truncate font-medium text-[var(--text-primary)]">
+                          {programLabel}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <span className="flex items-center gap-1 opacity-80">
+                          <FileText className="h-3 w-3 shrink-0" />
+                          Size
+                        </span>
+                        <p className="mt-0.5 truncate font-medium text-[var(--text-primary)]">
                           {formatFileSize(doc.size_bytes)}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      <div className="relative" data-doc-visibility-menu>
-                        <button
-                          type="button"
-                          disabled={isToggling}
-                          aria-haspopup="menu"
-                          aria-expanded={openDocMenuId === doc.id}
-                          onClick={() =>
-                            setOpenDocMenuId((curr) => (curr === doc.id ? null : doc.id))
-                          }
-                          className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                            isSelected
-                              ? 'border-[var(--border-accent)] bg-[var(--nav-active-bg)] text-[var(--text-primary)]'
-                              : 'border-[var(--border-medium)] bg-[var(--bg-main)] text-[var(--text-secondary)] hover:border-[var(--text-primary)] hover:text-[var(--text-primary)]'
-                          }`}
-                        >
-                          {isSelected ? (
-                            <Eye className="h-3.5 w-3.5" />
-                          ) : (
-                            <EyeOff className="h-3.5 w-3.5" />
-                          )}
-                          <span>{isSelected ? 'View' : 'Hide'}</span>
-                          <span className="font-mono text-[10px] text-[var(--text-secondary)]">
-                            · Education tab
-                          </span>
-                          <ChevronDown className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
-                        </button>
-
-                        {openDocMenuId === doc.id && (
-                          <div
-                            role="menu"
-                            aria-label={`Display options for ${doc.title}`}
-                            className="absolute right-0 z-20 mt-1.5 w-56 rounded-xl border border-[var(--border-medium)] bg-[var(--surface-elevated)] p-1.5 shadow-xl"
-                          >
-                            <button
-                              type="button"
-                              role="menuitemradio"
-                              aria-checked={isSelected}
-                              onClick={() => void handleSetDocumentDisplay(doc, true)}
-                              className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
-                                isSelected
-                                  ? 'bg-[var(--nav-active-bg)] text-[var(--text-primary)] font-medium'
-                                  : 'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]'
-                              }`}
-                            >
-                              <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                              <div>
-                                <p>View</p>
-                                <p className="text-[11px] font-normal text-[var(--text-secondary)]">
-                                  Display in Education tab
-                                </p>
-                              </div>
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitemradio"
-                              aria-checked={!isSelected}
-                              onClick={() => void handleSetDocumentDisplay(doc, false)}
-                              className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
-                                !isSelected
-                                  ? 'bg-[var(--nav-active-bg)] text-[var(--text-primary)] font-medium'
-                                  : 'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]'
-                              }`}
-                            >
-                              <EyeOff className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                              <div>
-                                <p>Hide</p>
-                                <p className="text-[11px] font-normal text-[var(--text-secondary)]">
-                                  Keep in document vault only
-                                </p>
-                              </div>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      <PillButton
-                        variant="ghost"
-                        size="sm"
+                    {/* 3-Dot Action Menu */}
+                    <div className="relative shrink-0" data-doc-visibility-menu>
+                      <button
+                        type="button"
+                        disabled={isToggling}
+                        aria-haspopup="menu"
+                        aria-expanded={openDocMenuId === doc.id}
+                        aria-label={`Document actions for ${doc.title}`}
                         onClick={() =>
-                          setConfirmDeleteDocId((curr) => (curr === doc.id ? null : doc.id))
+                          setOpenDocMenuId((curr) => (curr === doc.id ? null : doc.id))
                         }
-                        className="text-[var(--danger-text)] hover:bg-[var(--danger-bg)]"
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:border-[var(--border-medium)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] cursor-pointer"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Delete
-                      </PillButton>
+                        <MoreVertical className="h-3.5 w-3.5" />
+                      </button>
+
+                      {openDocMenuId === doc.id && (
+                        <div
+                          role="menu"
+                          aria-label={`Actions for ${doc.title}`}
+                          className="absolute right-0 bottom-9 z-20 w-56 rounded-xl border border-[var(--border-medium)] bg-[var(--surface-elevated)] p-1.5 shadow-xl"
+                        >
+                          <button
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={isSelected}
+                            onClick={() => void handleSetDocumentDisplay(doc, true)}
+                            className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-[var(--nav-active-bg)] text-[var(--text-primary)] font-medium'
+                                : 'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]'
+                            }`}
+                          >
+                            <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            <div>
+                              <p>View in Education tab</p>
+                              <p className="text-[11px] font-normal text-[var(--text-secondary)]">
+                                Display on Education &amp; /@username
+                              </p>
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={!isSelected}
+                            onClick={() => void handleSetDocumentDisplay(doc, false)}
+                            className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
+                              !isSelected
+                                ? 'bg-[var(--nav-active-bg)] text-[var(--text-primary)] font-medium'
+                                : 'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]'
+                            }`}
+                          >
+                            <EyeOff className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            <div>
+                              <p>Hide from Education tab</p>
+                              <p className="text-[11px] font-normal text-[var(--text-secondary)]">
+                                Keep in document vault only
+                              </p>
+                            </div>
+                          </button>
+
+                          <div className="my-1 border-t border-[var(--border-subtle)]" />
+
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setOpenDocMenuId(null);
+                              setConfirmDeleteDocId((curr) => (curr === doc.id ? null : doc.id));
+                            }}
+                            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs text-[var(--danger-text)] hover:bg-[var(--danger-bg)] cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                            <span>Delete document</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {isConfirmingDocDelete && (
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-2.5 text-xs">
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] px-3 py-2 text-xs">
                       <span className="text-[var(--danger-text)]">
-                        Delete <strong>{doc.title}</strong> permanently?
+                        Delete <strong>{doc.title}</strong>?
                       </span>
                       <div className="flex items-center gap-2">
                         <PillButton
@@ -958,21 +988,18 @@ export const EducationPage: React.FC = () => {
                           type="button"
                           disabled={isDeletingDoc}
                           onClick={() => void handleDeleteDocument(doc)}
-                          className="inline-flex h-8 cursor-pointer items-center justify-center rounded-full border border-[var(--danger-border)] bg-[var(--danger-text)] px-3.5 text-xs font-medium text-white"
+                          className="inline-flex h-8 cursor-pointer items-center justify-center rounded-full border border-[var(--danger-border)] bg-[var(--danger-text)] px-3 text-xs font-medium text-white"
                         >
-                          {isDeletingDoc ? 'Deleting…' : 'Confirm delete'}
+                          {isDeletingDoc ? 'Deleting…' : 'Confirm'}
                         </button>
                       </div>
                     </div>
                   )}
-                </li>
+                </article>
               );
             })}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </section>
 
       <EducationFormModal

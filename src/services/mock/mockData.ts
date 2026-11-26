@@ -335,10 +335,17 @@ export const MOCK_DOCUMENTS: Document[] = [
     size_bytes: 418920,
     page_count: 1,
     sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    notes: 'Sample placeholder document metadata',
-    processing_status: 'needs_review',
+    notes:
+      '5th Semester Marksheet – B.E. Computer Science and Engineering. Issued by Visvesvaraya Technological University (VTU) for the Academic Year 2024–25. CGPA: 8.62.',
+    processing_status: 'confirmed',
     show_in_education: true,
-    attached_to: [],
+    attached_to: [
+      {
+        entity_type: 'education',
+        entity_id: 'ed000000-0000-4000-8000-000000000001',
+        label: 'B.E. CSE',
+      },
+    ],
     uploaded_at: '2026-11-16T14:20:00Z',
     updated_at: '2026-11-16T14:21:00Z',
   },
