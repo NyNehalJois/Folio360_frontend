@@ -32,6 +32,7 @@ export type ApiErrorCode =
   | 'REAUTH_REQUIRED'
   | 'FORBIDDEN'
   | 'NOT_FOUND'
+  | 'DOCUMENT_NOT_FOUND'
   | 'EMAIL_TAKEN'
   | 'SLUG_TAKEN'
   | 'DOCUMENT_IN_USE'
@@ -40,16 +41,31 @@ export type ApiErrorCode =
   | 'OAUTH_DENIED'
   | 'OAUTH_STATE_INVALID'
   | 'PROCESSING_NOT_READY'
+  | 'DOCUMENT_NOT_READY'
+  | 'DOCUMENT_REJECTED'
+  | 'DOCUMENT_SCAN_FAILED'
+  | 'DOCUMENT_RESCAN_NOT_ALLOWED'
+  | 'DOCUMENT_SCAN_RETRIES_EXHAUSTED'
+  | 'INVALID_STATE_TRANSITION'
   | 'CONFLICT'
   | 'SHARE_LINK_EXPIRED'
   | 'SHARE_LINK_REVOKED'
   | 'FILE_TOO_LARGE'
   | 'UNSUPPORTED_FILE_TYPE'
+  | 'MALFORMED_FILE'
   | 'VALIDATION_ERROR'
   | 'DOCUMENT_LINKING_NOT_ENABLED'
   | 'EDUCATION_NOT_FOUND'
   | 'INVALID_ACCESS_TOKEN'
   | 'INVALID_REFERENCE'
+  | 'ANALYSIS_NOT_FOUND'
+  | 'ANALYSIS_IN_PROGRESS'
+  | 'ANALYSIS_ALREADY_COMPLETED'
+  | 'ANALYSIS_ALREADY_EXISTS'
+  | 'ANALYSIS_RETRY_NOT_ALLOWED'
+  | 'ANALYSIS_RETRIES_EXHAUSTED'
+  | 'ANALYSIS_INPUT_TOO_LARGE'
+  | 'AI_ANALYZER_NOT_CONFIGURED'
   | 'RATE_LIMITED'
   | 'INTERNAL_ERROR'
   | 'AI_UNAVAILABLE'
@@ -743,87 +759,136 @@ export type DocumentCategory =
   | 'project_report'
   | 'other';
 
+export type DocumentMimeType = 'application/pdf' | 'image/jpeg' | 'image/png';
+
 export type DocumentProcessingStatus =
-  | 'none'
-  | 'queued'
-  | 'running'
-  | 'needs_review'
-  | 'confirmed'
+  | 'pending_scan'
+  | 'scanning'
+  | 'ready'
   | 'rejected'
-  | 'failed';
+  | 'scan_failed';
+
+export type DocumentFailureReason =
+  | 'malware_detected'
+  | 'validation_failed'
+  | 'scanner_unavailable'
+  | 'scanner_timeout'
+  | 'scanner_error'
+  | 'promotion_failed';
 
 export interface DocumentCategoryInfo {
   key: DocumentCategory;
   label: string;
 }
 
+export interface DocumentAttachedToItem {
+  entity_type: 'education';
+  entity_id: UUID;
+  label: string;
+}
+
 export interface Document {
   id: UUID;
+  user_id?: UUID;
   title: string;
   original_filename: string;
   category: DocumentCategory;
-  mime_type: 'application/pdf' | 'image/jpeg' | 'image/png';
+  mime_type: DocumentMimeType;
   size_bytes: number;
   page_count: number | null;
   sha256: string;
   notes: string | null;
   processing_status: DocumentProcessingStatus;
-  /** Phase 2 backend dependency: controls whether this document is displayed in the Education tab */
-  show_in_education?: boolean;
-  attached_to: {
-    entity_type: string;
-    entity_id: UUID;
-    label: string;
-  }[];
+  failure_reason: DocumentFailureReason | null;
+  /** Controls whether this document is displayed in the Education tab */
+  show_in_education: boolean;
+  attached_to: DocumentAttachedToItem[];
   uploaded_at: Timestamp;
   updated_at: Timestamp;
 }
 
-/* --- 5.12 Document Processing / OCR (/document-processing) --- */
+export interface DocumentUploadResponse {
+  document: Document;
+  processing_job: null;
+}
 
-export interface ProcessingJob {
+export interface DocumentPreviewUrl extends SignedUrl {
+  mime_type: DocumentMimeType;
+}
+
+/* --- 5.12 AI Document Analysis (/documents/{id}/analysis) --- */
+
+export type AnalysisStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type AnalyzedDocumentType = 'marksheet' | 'certificate' | 'other';
+export type AnalysisFailureReason =
+  | 'provider_not_configured'
+  | 'provider_unavailable'
+  | 'provider_timeout'
+  | 'provider_rate_limited'
+  | 'invalid_provider_output'
+  | 'unsupported_content'
+  | 'analysis_error';
+
+export interface MarksheetSubjectExtraction {
+  subject_name: string;
+  subject_code: string | null;
+  marks_obtained: number | null;
+  max_marks: number | null;
+  grade: string | null;
+  raw_mark_text: string | null;
+  uncertain: boolean;
+}
+
+export interface MarksheetExtraction {
+  institution_name: string | null;
+  student_name: string | null;
+  program_or_course: string | null;
+  semester_or_exam: string | null;
+  academic_year: string | null;
+  subjects: MarksheetSubjectExtraction[];
+  total_marks_obtained: number | null;
+  total_max_marks: number | null;
+  result_status: string | null;
+}
+
+export interface CertificateExtraction {
+  certificate_title: string | null;
+  issuing_institution: string | null;
+  recipient_name: string | null;
+  award_or_qualification: string | null;
+  issue_date: string | null;
+}
+
+export interface DocumentExtractionPayload {
+  document_type: AnalyzedDocumentType;
+  is_verified: false;
+  summary: string;
+  confidence: number | null;
+  uncertain_fields: string[];
+  extracted_text_excerpt: string | null;
+  marksheet: MarksheetExtraction | null;
+  certificate: CertificateExtraction | null;
+}
+
+export interface DocumentAnalysisResponse {
   id: UUID;
   document_id: UUID;
-  status: Exclude<DocumentProcessingStatus, 'none'>;
-  error_code: string | null;
+  status: AnalysisStatus;
+  document_type: AnalyzedDocumentType | null;
+  is_verified: false;
+  provider_name: string;
+  model_name: string;
+  analyzer_version: string;
+  attempts: number;
+  summary: string | null;
+  extracted_data: DocumentExtractionPayload | null;
+  confidence: number | null;
+  uncertain_fields: string[];
+  failure_reason: AnalysisFailureReason | null;
+  started_at: Timestamp | null;
+  completed_at: Timestamp | null;
   created_at: Timestamp;
-  finished_at: Timestamp | null;
-}
-
-export interface ProcessingResult {
-  job_id: UUID;
-  engine: string;
-  text_preview: string;
-  suggested_category: DocumentCategory;
-  category_confidence: number;
-  fields: {
-    key: string;
-    label: string;
-    value: string;
-    confidence: number;
-  }[];
-  suggested_target: {
-    entity_type: 'certificate' | 'academic_record' | 'education' | 'none';
-    prefill: Record<string, unknown>;
-  };
-  warnings: string[];
-}
-
-export interface ProcessingConfirm {
-  category: DocumentCategory;
-  title?: string;
-  target:
-    | { action: 'none' }
-    | {
-        action: 'create';
-        entity_type: 'certificate' | 'education' | 'academic_record';
-        data: Record<string, unknown>;
-      }
-    | {
-        action: 'attach';
-        entity_type: string;
-        entity_id: UUID;
-      };
+  updated_at: Timestamp;
 }
 
 /* --- 5.13 Resume Studio (/resumes) --- */

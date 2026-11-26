@@ -23,9 +23,6 @@ function sanitizeUpdatePayload(payload: Partial<EducationCreate>): Partial<Educa
   if (next.result_type === 'none') {
     next.result_type = null;
   }
-  if (Array.isArray(next.document_ids) && next.document_ids.length === 0) {
-    delete next.document_ids;
-  }
   return next;
 }
 

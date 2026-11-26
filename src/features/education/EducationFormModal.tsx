@@ -1,13 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, Check, FileText, Globe, Lock, X } from 'lucide-react';
+import {
+  AlertCircle,
+  Check,
+  FileText,
+  Globe,
+  Loader2,
+  Lock,
+  RefreshCw,
+  X,
+} from 'lucide-react';
 import { PillButton } from '@/design/components/PillButton';
+import { isDocumentReady } from '@/features/documents/DocumentStatusBadge';
 import {
   DocumentUploadWidget,
   formatDocumentCategory,
   formatFileSize,
 } from '@/features/documents/DocumentUploadWidget';
-import { API_CONFIG } from '@/services/config';
 import { educationService } from '@/services/api/education.service';
+import { ApiClientError } from '@/services/http';
 import type { Document, Education, EducationCreate, EducationLevel, Visibility } from '@/types/api';
 import {
   EDUCATION_LEVEL_OPTIONS,
@@ -22,6 +32,9 @@ interface EducationFormModalProps {
   open: boolean;
   editingRecord: Education | null;
   availableDocuments: Document[];
+  documentsLoading?: boolean;
+  documentsError?: string | null;
+  onRetryDocuments?: () => void;
   onDocumentUploaded: (doc: Document) => void;
   onClose: () => void;
   onSaved: (record: Education, mode: 'create' | 'edit') => void | Promise<void>;
@@ -37,6 +50,9 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
   open,
   editingRecord,
   availableDocuments,
+  documentsLoading = false,
+  documentsError = null,
+  onRetryDocuments,
   onDocumentUploaded,
   onClose,
   onSaved,
@@ -177,14 +193,12 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
         }
         if (nextVisibility !== editingRecord.visibility) patchPayload.visibility = nextVisibility;
 
-        if (API_CONFIG.useMocks) {
-          const prevDocIds = editingRecord.documents?.map((doc) => doc.id) ?? [];
-          const docsChanged =
-            selectedDocIds.length !== prevDocIds.length ||
-            selectedDocIds.some((id, idx) => id !== prevDocIds[idx]);
-          if (docsChanged) {
-            patchPayload.document_ids = selectedDocIds;
-          }
+        const prevDocIds = editingRecord.documents?.map((doc) => doc.id) ?? [];
+        const docsChanged =
+          selectedDocIds.length !== prevDocIds.length ||
+          selectedDocIds.some((id, idx) => id !== prevDocIds[idx]);
+        if (docsChanged) {
+          patchPayload.document_ids = selectedDocIds;
         }
 
         if (Object.keys(patchPayload).length === 0) {
@@ -214,12 +228,18 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
           result_value: null,
           show_result_publicly: true,
           achievements: [],
-          document_ids: API_CONFIG.useMocks ? selectedDocIds : [],
+          document_ids: selectedDocIds,
         };
         saved = await educationService.create(payload);
       }
       await onSaved(saved, isEdit ? 'edit' : 'create');
     } catch (err) {
+      if (
+        err instanceof ApiClientError &&
+        (err.code === 'DOCUMENT_NOT_READY' || err.code === 'INVALID_REFERENCE')
+      ) {
+        onRetryDocuments?.();
+      }
       setSubmitError(
         err instanceof Error
           ? err.message
@@ -229,6 +249,13 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
       setSaving(false);
     }
   };
+
+  const selectableDocuments = availableDocuments.filter((doc) => isDocumentReady(doc));
+  const nonReadyCount = availableDocuments.length - selectableDocuments.length;
+  const selectableIds = new Set(selectableDocuments.map((doc) => doc.id));
+  const existingMissingRefs = (editingRecord?.documents ?? []).filter(
+    (ref) => selectedDocIds.includes(ref.id) && !selectableIds.has(ref.id),
+  );
 
   const fieldBorder = (hasError?: string) =>
     hasError
@@ -603,7 +630,7 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
               )}
             </div>
 
-            {/* Attach or Upload Academic Documents */}
+            {/* Attach or Upload Ready Academic Documents */}
             <div className="space-y-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/35 p-4">
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -611,77 +638,130 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
                     Academic Documents
                   </p>
                   <p className="text-xs text-[var(--text-secondary)]">
-                    {API_CONFIG.useMocks
-                      ? 'Attach existing documents or upload new marksheets and certificates.'
-                      : 'Document Vault coming soon — marksheet and certificate linking will be enabled in the next stage.'}
+                    Attach validated documents from your private Document Vault or upload a new file. Linked documents stay private to your workspace.
                   </p>
                 </div>
-                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--text-secondary)]">
-                  {API_CONFIG.useMocks ? `${selectedDocIds.length} attached` : 'Coming soon'}
+                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--text-secondary)] shrink-0">
+                  {selectedDocIds.length} attached
                 </span>
               </div>
 
-              {!API_CONFIG.useMocks ? (
+              {documentsLoading ? (
+                <div className="flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-main)] px-3 py-2.5 text-xs text-[var(--text-secondary)]">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Loading your Document Vault…</span>
+                </div>
+              ) : documentsError ? (
+                <div
+                  role="alert"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)] px-3 py-2.5 text-xs text-[var(--danger-text)]"
+                >
+                  <span>{documentsError}</span>
+                  {onRetryDocuments && (
+                    <PillButton
+                      variant="secondary"
+                      size="sm"
+                      onClick={onRetryDocuments}
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Retry
+                    </PillButton>
+                  )}
+                </div>
+              ) : selectableDocuments.length === 0 && existingMissingRefs.length === 0 ? (
                 <div className="rounded-md border border-dashed border-[var(--border-medium)] bg-[var(--bg-main)]/60 px-3.5 py-3 text-xs text-[var(--text-secondary)]">
-                  Document upload and attachment are temporarily disabled until Document Vault is connected.
+                  No Ready documents available yet. Only scanned and verified documents (`ready`) can be attached.
                 </div>
               ) : (
-                <>
-                  {availableDocuments.length > 0 && (
-                    <div className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
-                      {availableDocuments.map((doc) => {
-                        const checked = selectedDocIds.includes(doc.id);
-                        return (
-                          <label
-                            key={doc.id}
-                            className={`flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs transition-colors ${
-                              checked
-                                ? 'border-[var(--border-accent)] bg-[var(--surface-elevated)]'
-                                : 'border-[var(--border-subtle)] bg-[var(--bg-main)] hover:border-[var(--border-medium)]'
-                            }`}
-                          >
-                            <span className="flex min-w-0 items-center gap-2.5">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() =>
-                                  setSelectedDocIds((prev) =>
-                                    prev.includes(doc.id)
-                                      ? prev.filter((id) => id !== doc.id)
-                                      : [...prev, doc.id],
-                                  )
-                                }
-                                className="h-3.5 w-3.5 rounded border-[var(--border-medium)] accent-[var(--accent)]"
-                              />
-                              <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-                              <span className="truncate font-medium text-[var(--text-primary)]">
-                                {doc.title}
-                              </span>
-                            </span>
-                            <span className="shrink-0 font-mono text-[10px] text-[var(--text-secondary)]">
-                              {formatDocumentCategory(doc.category)} · {formatFileSize(doc.size_bytes)}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
+                <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
+                  {existingMissingRefs.map((ref) => (
+                    <label
+                      key={ref.id}
+                      className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)]/50 px-3 py-2 text-xs"
+                    >
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedDocIds.includes(ref.id)}
+                          onChange={() =>
+                            setSelectedDocIds((prev) =>
+                              prev.filter((id) => id !== ref.id),
+                            )
+                          }
+                          className="h-3.5 w-3.5 rounded border-[var(--border-medium)] accent-[var(--accent)]"
+                        />
+                        <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--danger-text)]" />
+                        <span className="truncate font-medium text-[var(--text-primary)]">
+                          {ref.title}
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-mono text-[10px] text-[var(--danger-text)]">
+                        Unavailable · Uncheck to unlink
+                      </span>
+                    </label>
+                  ))}
 
-                  <div className="border-t border-[var(--border-subtle)] pt-3">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-2">
-                      Upload &amp; Attach New Document
-                    </p>
-                    <DocumentUploadWidget
-                      compact
-                      submitLabel="Upload & attach"
-                      onUploaded={(doc) => {
-                        onDocumentUploaded(doc);
-                        setSelectedDocIds((prev) => (prev.includes(doc.id) ? prev : [...prev, doc.id]));
-                      }}
-                    />
-                  </div>
-                </>
+                  {selectableDocuments.map((doc) => {
+                    const checked = selectedDocIds.includes(doc.id);
+                    return (
+                      <label
+                        key={doc.id}
+                        className={`flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs transition-colors ${
+                          checked
+                            ? 'border-[var(--border-accent)] bg-[var(--surface-elevated)]'
+                            : 'border-[var(--border-subtle)] bg-[var(--bg-main)] hover:border-[var(--border-medium)]'
+                        }`}
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setSelectedDocIds((prev) =>
+                                prev.includes(doc.id)
+                                  ? prev.filter((id) => id !== doc.id)
+                                  : [...prev, doc.id],
+                              )
+                            }
+                            className="h-3.5 w-3.5 rounded border-[var(--border-medium)] accent-[var(--accent)]"
+                          />
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
+                          <span className="truncate font-medium text-[var(--text-primary)]">
+                            {doc.title}
+                          </span>
+                        </span>
+                        <span className="shrink-0 font-mono text-[10px] text-[var(--text-secondary)]">
+                          {formatDocumentCategory(doc.category)} · {formatFileSize(doc.size_bytes)}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               )}
+
+              {nonReadyCount > 0 && (
+                <p className="text-[11px] text-[var(--text-secondary)]">
+                  {nonReadyCount} unverified, scanning, or rejected document{nonReadyCount === 1 ? ' is' : 's are'} hidden because only Ready documents can be linked.
+                </p>
+              )}
+
+              <div className="border-t border-[var(--border-subtle)] pt-3">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-2">
+                  Upload &amp; Attach New Document
+                </p>
+                <DocumentUploadWidget
+                  compact
+                  submitLabel="Upload & attach"
+                  onUploaded={(doc) => {
+                    onDocumentUploaded(doc);
+                    if (isDocumentReady(doc)) {
+                      setSelectedDocIds((prev) =>
+                        prev.includes(doc.id) ? prev : [...prev, doc.id],
+                      );
+                    }
+                  }}
+                />
+              </div>
             </div>
 
             <div className="flex flex-col gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/35 p-4 sm:flex-row sm:items-center sm:justify-between">

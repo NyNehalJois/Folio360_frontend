@@ -6,6 +6,7 @@ import {
   ChevronDown,
   FileText,
   FolderGit2,
+  FolderOpen,
   GraduationCap,
   Home,
   LogOut,
@@ -35,6 +36,7 @@ interface NavItem {
 const SIDEBAR_ITEMS: NavItem[] = [
   { label: 'Overview', to: '/workspace', end: true, icon: Home },
   { label: 'Education', to: '/workspace/education', icon: GraduationCap },
+  { label: 'Documents', to: '/workspace/documents', icon: FolderOpen },
   { label: 'Projects', to: '/workspace/projects', icon: FolderGit2 },
   { label: 'Skills', to: '/workspace/skills', icon: Sparkles },
   { label: 'Certificates', to: '/workspace/certificates', icon: Award },

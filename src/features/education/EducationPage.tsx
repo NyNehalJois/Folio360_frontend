@@ -5,24 +5,33 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  ExternalLink,
   Eye,
   EyeOff,
   FileText,
   Globe,
   GraduationCap,
+  Info,
   Landmark,
   Lock,
   MapPin,
   MoreVertical,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
-  Sparkles,
   Trash2,
   Upload,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from '@/design/components/EditorialStates';
 import { PillButton } from '@/design/components/PillButton';
+import { DocumentDetailsModal } from '@/features/documents/DocumentDetailsModal';
+import {
+  DocumentStatusBadge,
+  formatDocumentFailureReason,
+  isDocumentReady,
+} from '@/features/documents/DocumentStatusBadge';
 import {
   DOCUMENT_CATEGORY_OPTIONS,
   DocumentUploadWidget,
@@ -31,8 +40,13 @@ import {
 } from '@/features/documents/DocumentUploadWidget';
 import { API_CONFIG } from '@/services/config';
 import type { ApiClientError } from '@/services/http';
-import { documentsService, educationService } from '@/services/api';
-import type { Document, DocumentCategory, Education } from '@/types/api';
+import { documentsService, educationService, openDocumentSignedUrl } from '@/services/api';
+import type {
+  Document,
+  DocumentCategory,
+  DocumentCategoryInfo,
+  Education,
+} from '@/types/api';
 import { EducationFormModal } from './EducationFormModal';
 import {
   formatEducationPeriod,
@@ -43,8 +57,13 @@ import {
 export const EducationPage: React.FC = () => {
   const [records, setRecords] = useState<Education[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [categories, setCategories] = useState<DocumentCategoryInfo[]>(
+    DOCUMENT_CATEGORY_OPTIONS.map((opt) => ({ key: opt.value, label: opt.label })),
+  );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<ApiClientError | Error | null>(null);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docsError, setDocsError] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Education | null>(null);
@@ -61,6 +80,8 @@ export const EducationPage: React.FC = () => {
   const [openDocMenuId, setOpenDocMenuId] = useState<string | null>(null);
   const [confirmDeleteDocId, setConfirmDeleteDocId] = useState<string | null>(null);
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
+  const [selectedDetailDoc, setSelectedDetailDoc] = useState<Document | null>(null);
+  const [previewingDocId, setPreviewingDocId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!openDocMenuId) return;
@@ -88,30 +109,56 @@ export const EducationPage: React.FC = () => {
     message: string;
   } | null>(null);
 
+  const loadDocumentsOnly = useCallback(async () => {
+    setDocsLoading(true);
+    setDocsError(null);
+    try {
+      const docsRes = await documentsService.list({ page: 1, page_size: 100 });
+      setDocuments(docsRes.items);
+    } catch (err) {
+      setDocsError(
+        err instanceof Error ? err.message : 'Unable to load documents from your vault.',
+      );
+    } finally {
+      setDocsLoading(false);
+    }
+  }, []);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    setDocsError(null);
     try {
-      if (API_CONFIG.useMocks) {
-        const [eduRes, docsRes] = await Promise.all([
-          educationService.list({ page: 1, page_size: 100 }),
-          documentsService.list({ page: 1, page_size: 100 }),
-        ]);
-        const sorted = sortEducationTimeline(eduRes.items);
-        setRecords(sorted);
-        setDocuments(docsRes.items);
-        setExpandedIds((prev) => {
-          if (Object.keys(prev).length > 0 || sorted.length === 0) return prev;
-          return { [sorted[0].id]: true };
-        });
+      const [eduResult, docsResult, catsResult] = await Promise.allSettled([
+        educationService.list({ page: 1, page_size: 100 }),
+        documentsService.list({ page: 1, page_size: 100 }),
+        documentsService.listCategories(),
+      ]);
+      if (eduResult.status === 'rejected') {
+        throw eduResult.reason;
+      }
+      const nextItems = API_CONFIG.useMocks
+        ? sortEducationTimeline(eduResult.value.items)
+        : eduResult.value.items;
+      setRecords(nextItems);
+      setExpandedIds((prev) => {
+        if (Object.keys(prev).length > 0 || nextItems.length === 0) return prev;
+        return { [nextItems[0].id]: true };
+      });
+
+      if (docsResult.status === 'fulfilled') {
+        setDocuments(docsResult.value.items);
       } else {
-        const eduRes = await educationService.list({ page: 1, page_size: 100 });
-        setRecords(eduRes.items);
         setDocuments([]);
-        setExpandedIds((prev) => {
-          if (Object.keys(prev).length > 0 || eduRes.items.length === 0) return prev;
-          return { [eduRes.items[0].id]: true };
-        });
+        setDocsError(
+          docsResult.reason instanceof Error
+            ? docsResult.reason.message
+            : 'Unable to load documents from your vault.',
+        );
+      }
+
+      if (catsResult.status === 'fulfilled' && catsResult.value.items.length > 0) {
+        setCategories(catsResult.value.items);
       }
     } catch (err) {
       setLoadError(err as ApiClientError | Error);
@@ -190,10 +237,26 @@ export const EducationPage: React.FC = () => {
             : [saved, ...prev];
         return sortEducationTimeline(next);
       });
+      void loadDocumentsOnly();
     } else {
       try {
-        const refreshed = await educationService.list({ page: 1, page_size: 100 });
-        setRecords(refreshed.items);
+        const [refreshedEdu, refreshedDocs] = await Promise.allSettled([
+          educationService.list({ page: 1, page_size: 100 }),
+          documentsService.list({ page: 1, page_size: 100 }),
+        ]);
+        if (refreshedEdu.status === 'fulfilled') {
+          setRecords(refreshedEdu.value.items);
+        } else {
+          setRecords((prev) =>
+            mode === 'edit'
+              ? prev.map((item) => (item.id === saved.id ? saved : item))
+              : [saved, ...prev],
+          );
+        }
+        if (refreshedDocs.status === 'fulfilled') {
+          setDocuments(refreshedDocs.value.items);
+          setDocsError(null);
+        }
       } catch {
         setRecords((prev) =>
           mode === 'edit'
@@ -262,7 +325,7 @@ export const EducationPage: React.FC = () => {
     if (deletingDocId) return;
     setDeletingDocId(doc.id);
     try {
-      await documentsService.remove(doc.id, true);
+      await documentsService.remove(doc.id, false);
       setDocuments((prev) => prev.filter((item) => item.id !== doc.id));
       setConfirmDeleteDocId(null);
       setActionBanner({
@@ -270,12 +333,59 @@ export const EducationPage: React.FC = () => {
         message: `Removed "${doc.title}" from your documents.`,
       });
     } catch (err) {
+      setConfirmDeleteDocId(null);
       setActionBanner({
         tone: 'error',
-        message: err instanceof Error ? err.message : 'Unable to delete document.',
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Unable to delete document. Unlink it from any Education records first or use Document Details.',
       });
     } finally {
       setDeletingDocId(null);
+    }
+  };
+
+  const handleOpenDocumentDetails = async (documentId: string) => {
+    const localMatch = documents.find((item) => item.id === documentId);
+    if (localMatch) {
+      setSelectedDetailDoc(localMatch);
+      return;
+    }
+    try {
+      const fetched = await documentsService.get(documentId);
+      setDocuments((prev) =>
+        prev.some((d) => d.id === fetched.id) ? prev : [fetched, ...prev],
+      );
+      setSelectedDetailDoc(fetched);
+    } catch (err) {
+      setActionBanner({
+        tone: 'error',
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Unable to open document details right now.',
+      });
+    }
+  };
+
+  const handlePreviewDocument = async (doc: Document) => {
+    if (!isDocumentReady(doc) || previewingDocId) return;
+    setPreviewingDocId(doc.id);
+    setActionBanner(null);
+    try {
+      const res = await documentsService.getPreviewUrl(doc.id);
+      openDocumentSignedUrl(res.url, 'preview', doc.original_filename);
+    } catch (err) {
+      setActionBanner({
+        tone: 'error',
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Unable to open document preview.',
+      });
+    } finally {
+      setPreviewingDocId(null);
     }
   };
 
@@ -582,20 +692,26 @@ export const EducationPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Attached Documents Summary */}
+                      {/* Linked Documents Summary */}
                       {attachedDocs.length > 0 && (
                         <div className="mt-4 flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--text-secondary)]">
+                            Linked ({attachedDocs.length}):
+                          </span>
                           {attachedDocs.map((doc) => (
-                            <span
+                            <button
                               key={doc.id}
-                              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-1 text-xs text-[var(--text-primary)]"
+                              type="button"
+                              onClick={() => void handleOpenDocumentDetails(doc.id)}
+                              title="Open document details or preview"
+                              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-1 text-xs text-[var(--text-primary)] transition-colors hover:border-[var(--border-medium)] hover:bg-[var(--bg-main)]"
                             >
                               <FileText className="h-3 w-3 text-[var(--text-secondary)]" />
                               <span>{doc.title}</span>
                               <span className="font-mono text-[10px] uppercase text-[var(--text-secondary)]">
                                 · {formatDocumentCategory(doc.category)}
                               </span>
-                            </span>
+                            </button>
                           ))}
                         </div>
                       )}
@@ -701,13 +817,12 @@ export const EducationPage: React.FC = () => {
         </section>
       )}
 
-      {/* Scrolled-Down Academic Documents Section (Image 1 Editorial Card Grid) */}
+      {/* Scrolled-Down Academic Documents Section */}
       <section
         id="education-documents"
         aria-labelledby="education-documents-heading"
         className="space-y-6 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-6 sm:p-7"
       >
-        {/* Top Row: Eyebrow + Heading + AI Processing Pill + Upload Document Button */}
         <div className="flex flex-col gap-4 border-b border-[var(--border-subtle)] pb-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">
@@ -720,46 +835,46 @@ export const EducationPage: React.FC = () => {
               Your Academic Documents
             </h2>
             <p className="mt-1 text-xs text-[var(--text-secondary)]">
-              Manage and view your educational documents. Upload marksheets, transcripts,
-              certificates and more.
+              Manage private marksheets, transcripts, and certificates linked to your Education workspace.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-main)] px-3 py-1.5 text-[11px] font-medium text-[var(--text-secondary)]">
-              <Sparkles className="h-3 w-3 text-[var(--accent)]" />
-              AI-Powered Document Processing
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            </span>
+            <Link
+              to="/workspace/documents"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-[var(--bg-main)] px-4 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--text-primary)]"
+            >
+              Open Document Vault
+            </Link>
 
             <PillButton
               variant="primary"
               size="md"
-              disabled={!API_CONFIG.useMocks}
-              title={!API_CONFIG.useMocks ? 'Document Vault coming soon' : undefined}
               onClick={() => setUploadPanelOpen((prev) => !prev)}
             >
               <Upload className="h-3.5 w-3.5" />
-              {!API_CONFIG.useMocks
-                ? 'Document Vault Coming Soon'
-                : uploadPanelOpen
-                  ? 'Close Upload'
-                  : 'Upload Document'}
+              {uploadPanelOpen ? 'Close Upload' : 'Upload Document'}
             </PillButton>
           </div>
         </div>
 
-        {!API_CONFIG.useMocks ? (
-          <div className="rounded-xl border border-dashed border-[var(--border-medium)] bg-[var(--bg-main)]/60 px-6 py-8 text-center">
-            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">
-              Document Vault coming soon
-            </p>
-            <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              Marksheet uploads, certificate attachments, and AI document processing will be enabled in the upcoming Document Vault stage.
-            </p>
+        {docsError && (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3 text-xs text-[var(--danger-text)]"
+          >
+            <span>{docsError}</span>
+            <PillButton
+              variant="secondary"
+              size="sm"
+              onClick={() => void loadDocumentsOnly()}
+            >
+              <RefreshCw className="h-3 w-3" />
+              Retry loading documents
+            </PillButton>
           </div>
-        ) : (
-          <>
+        )}
+
         {/* Toggleable Upload Drawer */}
         {uploadPanelOpen && (
           <div className="rounded-xl border border-[var(--border-medium)] bg-[var(--surface-muted)]/60 p-4">
@@ -767,12 +882,22 @@ export const EducationPage: React.FC = () => {
               Upload New Academic Document
             </p>
             <DocumentUploadWidget
+              categories={categories}
+              showNotes
+              showEducationToggle
               onUploaded={(doc) => {
                 setDocuments((prev) => [doc, ...prev]);
                 setUploadPanelOpen(false);
                 setActionBanner({
-                  tone: 'success',
-                  message: `Uploaded "${doc.title}" to Your Academic Documents.`,
+                  tone:
+                    doc.processing_status === 'rejected' ||
+                    doc.processing_status === 'scan_failed'
+                      ? 'error'
+                      : 'success',
+                  message:
+                    doc.processing_status === 'ready'
+                      ? `Uploaded "${doc.title}" to Your Academic Documents.`
+                      : `Uploaded "${doc.title}" (status: ${doc.processing_status}).`,
                 });
               }}
             />
@@ -857,232 +982,247 @@ export const EducationPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {filteredDocuments.map((doc) => {
-              const isSelected = Boolean(doc.show_in_education);
-              const isToggling = togglingDocId === doc.id;
-              const isConfirmingDocDelete = confirmDeleteDocId === doc.id;
-              const isDeletingDoc = deletingDocId === doc.id;
-              const uploadedLabel = new Date(doc.uploaded_at).toLocaleDateString('en-GB', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-              });
-              const programLabel =
-                doc.attached_to?.[0]?.label ||
-                (primarySummary
-                  ? `${primarySummary.degree}${primarySummary.branch ? ' CSE' : ''}`
-                  : 'Academic Vault');
-              const summaryText =
-                doc.notes ||
-                `${formatDocumentCategory(doc.category)} uploaded as ${doc.original_filename}. ${
-                  isSelected
-                    ? 'Visible in your Education tab.'
-                    : 'Stored privately in your academic vault.'
-                }`;
+                  {filteredDocuments.map((doc) => {
+                    const isSelected = Boolean(doc.show_in_education);
+                    const isToggling = togglingDocId === doc.id;
+                    const isConfirmingDocDelete = confirmDeleteDocId === doc.id;
+                    const isDeletingDoc = deletingDocId === doc.id;
+                    const ready = isDocumentReady(doc);
+                    const failureText = formatDocumentFailureReason(doc.failure_reason);
+                    const uploadedLabel = new Date(doc.uploaded_at).toLocaleDateString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    });
+                    const programLabel =
+                      doc.attached_to?.[0]?.label ||
+                      (primarySummary
+                        ? `${primarySummary.degree}${primarySummary.branch ? ' CSE' : ''}`
+                        : 'Academic Vault');
+                    const notesText =
+                      doc.notes ||
+                      `${formatDocumentCategory(doc.category)} (${doc.original_filename}). ${
+                        isSelected
+                          ? 'Shown in your private Education tab.'
+                          : 'Hidden from your Education tab.'
+                      }`;
 
-              return (
-                <article
-                  key={doc.id}
-                  className="flex flex-col justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-main)] p-4 transition-colors hover:border-[var(--border-medium)]"
-                >
-                  {/* Card Top: Title + Category + Thumbnail */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <FileText className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
-                        <h3 className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                          {doc.title}
-                        </h3>
-                        <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-2.5 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]">
-                          {formatDocumentCategory(doc.category)}
-                        </span>
-                      </div>
-
-                      <div className="mt-3">
-                        <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-primary)]">
-                          <Sparkles className="h-3 w-3 text-[var(--accent)]" />
-                          AI Generated Description
-                        </p>
-                        <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-[var(--text-secondary)]">
-                          {summaryText}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Document Miniature Preview */}
-                    <div className="hidden sm:flex h-24 w-24 shrink-0 flex-col justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-2 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <span className="h-2 w-2 rounded-full bg-[var(--accent)]/60" />
-                        <span className="font-mono text-[7px] uppercase tracking-wider text-[var(--text-secondary)]">
-                          {doc.mime_type === 'application/pdf' ? 'PDF' : 'IMG'}
-                        </span>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="h-1 w-full rounded bg-[var(--border-medium)]" />
-                        <div className="h-1 w-4/5 rounded bg-[var(--border-subtle)]" />
-                        <div className="h-1 w-full rounded bg-[var(--border-subtle)]" />
-                        <div className="h-1 w-3/5 rounded bg-[var(--border-subtle)]" />
-                      </div>
-                      <p className="truncate font-mono text-[7px] text-[var(--text-secondary)]">
-                        {doc.original_filename}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Card Footer: Uploaded on · Program · Size + 3-dot Menu */}
-                  <div className="mt-4 flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-3">
-                    <div className="grid flex-1 grid-cols-3 gap-2 text-[10px] text-[var(--text-secondary)]">
-                      <div className="min-w-0">
-                        <span className="flex items-center gap-1 opacity-80">
-                          <Calendar className="h-3 w-3 shrink-0" />
-                          Uploaded on
-                        </span>
-                        <p className="mt-0.5 truncate font-medium text-[var(--text-primary)]">
-                          {uploadedLabel}
-                        </p>
-                      </div>
-                      <div className="min-w-0">
-                        <span className="flex items-center gap-1 opacity-80">
-                          <GraduationCap className="h-3 w-3 shrink-0" />
-                          Program
-                        </span>
-                        <p className="mt-0.5 truncate font-medium text-[var(--text-primary)]">
-                          {programLabel}
-                        </p>
-                      </div>
-                      <div className="min-w-0">
-                        <span className="flex items-center gap-1 opacity-80">
-                          <FileText className="h-3 w-3 shrink-0" />
-                          Size
-                        </span>
-                        <p className="mt-0.5 truncate font-medium text-[var(--text-primary)]">
-                          {formatFileSize(doc.size_bytes)}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* 3-Dot Action Menu */}
-                    <div className="relative shrink-0" data-doc-visibility-menu>
-                      <button
-                        type="button"
-                        disabled={isToggling}
-                        aria-haspopup="menu"
-                        aria-expanded={openDocMenuId === doc.id}
-                        aria-label={`Document actions for ${doc.title}`}
-                        onClick={() =>
-                          setOpenDocMenuId((curr) => (curr === doc.id ? null : doc.id))
-                        }
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:border-[var(--border-medium)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                    return (
+                      <article
+                        key={doc.id}
+                        className="flex flex-col justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-main)] p-4 transition-colors hover:border-[var(--border-medium)]"
                       >
-                        <MoreVertical className="h-3.5 w-3.5" />
-                      </button>
-
-                      {openDocMenuId === doc.id && (
-                        <div
-                          role="menu"
-                          aria-label={`Actions for ${doc.title}`}
-                          className="absolute right-0 bottom-9 z-20 w-56 rounded-xl border border-[var(--border-medium)] bg-[var(--surface-elevated)] p-1.5 shadow-xl"
-                        >
-                          <button
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={isSelected}
-                            onClick={() => void handleSetDocumentDisplay(doc, true)}
-                            className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
-                              isSelected
-                                ? 'bg-[var(--nav-active-bg)] text-[var(--text-primary)] font-medium'
-                                : 'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]'
-                            }`}
-                          >
-                            <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                            <div>
-                              <p>View in Education tab</p>
-                              <p className="text-[11px] font-normal text-[var(--text-secondary)]">
-                                Display on Education &amp; /@username
-                              </p>
+                        {/* Card Top: Title + Category + Scan Status */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <FileText className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
+                              <h3 className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                                {doc.title}
+                              </h3>
+                              <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-2.5 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]">
+                                {formatDocumentCategory(doc.category)}
+                              </span>
+                              <DocumentStatusBadge status={doc.processing_status} />
                             </div>
-                          </button>
 
-                          <button
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={!isSelected}
-                            onClick={() => void handleSetDocumentDisplay(doc, false)}
-                            className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
-                              !isSelected
-                                ? 'bg-[var(--nav-active-bg)] text-[var(--text-primary)] font-medium'
-                                : 'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]'
-                            }`}
-                          >
-                            <EyeOff className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                            <div>
-                              <p>Hide from Education tab</p>
-                              <p className="text-[11px] font-normal text-[var(--text-secondary)]">
-                                Keep in document vault only
+                            <p className="mt-2.5 line-clamp-3 text-xs leading-relaxed text-[var(--text-secondary)]">
+                              {notesText}
+                            </p>
+
+                            {failureText && (
+                              <p className="mt-2 rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)] px-2.5 py-1 text-[11px] text-[var(--danger-text)]">
+                                {failureText}
                               </p>
-                            </div>
-                          </button>
-
-                          <div className="my-1 border-t border-[var(--border-subtle)]" />
-
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => {
-                              setOpenDocMenuId(null);
-                              setConfirmDeleteDocId((curr) => (curr === doc.id ? null : doc.id));
-                            }}
-                            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs text-[var(--danger-text)] hover:bg-[var(--danger-bg)] cursor-pointer"
-                          >
-                            <Trash2 className="h-3.5 w-3.5 shrink-0" />
-                            <span>Delete document</span>
-                          </button>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
 
-                  {isConfirmingDocDelete && (
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] px-3 py-2 text-xs">
-                      <span className="text-[var(--danger-text)]">
-                        Delete <strong>{doc.title}</strong>?
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <PillButton
-                          variant="secondary"
-                          size="sm"
-                          disabled={isDeletingDoc}
-                          onClick={() => setConfirmDeleteDocId(null)}
-                        >
-                          Cancel
-                        </PillButton>
-                        <button
-                          type="button"
-                          disabled={isDeletingDoc}
-                          onClick={() => void handleDeleteDocument(doc)}
-                          className="inline-flex h-8 cursor-pointer items-center justify-center rounded-full border border-[var(--danger-border)] bg-[var(--danger-text)] px-3 text-xs font-medium text-white"
-                        >
-                          {isDeletingDoc ? 'Deleting…' : 'Confirm'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </article>
-              );
-            })}
+                        {/* Card Footer: Uploaded on · Program · Size + 3-dot Menu */}
+                        <div className="mt-4 flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-3">
+                          <div className="grid flex-1 grid-cols-3 gap-2 text-[10px] text-[var(--text-secondary)]">
+                            <div className="min-w-0">
+                              <span className="flex items-center gap-1 opacity-80">
+                                <Calendar className="h-3 w-3 shrink-0" />
+                                Uploaded on
+                              </span>
+                              <p className="mt-0.5 truncate font-medium text-[var(--text-primary)]">
+                                {uploadedLabel}
+                              </p>
+                            </div>
+                            <div className="min-w-0">
+                              <span className="flex items-center gap-1 opacity-80">
+                                <GraduationCap className="h-3 w-3 shrink-0" />
+                                Linked
+                              </span>
+                              <p className="mt-0.5 truncate font-medium text-[var(--text-primary)]">
+                                {doc.attached_to.length > 0 ? programLabel : 'Unattached'}
+                              </p>
+                            </div>
+                            <div className="min-w-0">
+                              <span className="flex items-center gap-1 opacity-80">
+                                <FileText className="h-3 w-3 shrink-0" />
+                                Size
+                              </span>
+                              <p className="mt-0.5 truncate font-medium text-[var(--text-primary)]">
+                                {formatFileSize(doc.size_bytes)}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* 3-Dot Action Menu */}
+                          <div className="relative shrink-0" data-doc-visibility-menu>
+                            <button
+                              type="button"
+                              disabled={isToggling}
+                              aria-haspopup="menu"
+                              aria-expanded={openDocMenuId === doc.id}
+                              aria-label={`Document actions for ${doc.title}`}
+                              onClick={() =>
+                                setOpenDocMenuId((curr) => (curr === doc.id ? null : doc.id))
+                              }
+                              className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:border-[var(--border-medium)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] cursor-pointer"
+                            >
+                              <MoreVertical className="h-3.5 w-3.5" />
+                            </button>
+
+                            {openDocMenuId === doc.id && (
+                              <div
+                                role="menu"
+                                aria-label={`Actions for ${doc.title}`}
+                                className="absolute right-0 bottom-9 z-20 w-60 rounded-xl border border-[var(--border-medium)] bg-[var(--surface-elevated)] p-1.5 shadow-xl"
+                              >
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={() => {
+                                    setOpenDocMenuId(null);
+                                    setSelectedDetailDoc(doc);
+                                  }}
+                                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs text-[var(--text-primary)] hover:bg-[var(--surface-muted)] cursor-pointer"
+                                >
+                                  <Info className="h-3.5 w-3.5 shrink-0" />
+                                  <span>Document details &amp; actions</span>
+                                </button>
+
+                                {ready && (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => {
+                                      setOpenDocMenuId(null);
+                                      void handlePreviewDocument(doc);
+                                    }}
+                                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs text-[var(--text-primary)] hover:bg-[var(--surface-muted)] cursor-pointer"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                                    <span>Open private preview</span>
+                                  </button>
+                                )}
+
+                                <div className="my-1 border-t border-[var(--border-subtle)]" />
+
+                                <button
+                                  type="button"
+                                  role="menuitemradio"
+                                  aria-checked={isSelected}
+                                  onClick={() => void handleSetDocumentDisplay(doc, true)}
+                                  className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-[var(--nav-active-bg)] text-[var(--text-primary)] font-medium'
+                                      : 'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]'
+                                  }`}
+                                >
+                                  <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                  <div>
+                                    <p>Show in Education tab</p>
+                                    <p className="text-[11px] font-normal text-[var(--text-secondary)]">
+                                      Private Education workspace only
+                                    </p>
+                                  </div>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  role="menuitemradio"
+                                  aria-checked={!isSelected}
+                                  onClick={() => void handleSetDocumentDisplay(doc, false)}
+                                  className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
+                                    !isSelected
+                                      ? 'bg-[var(--nav-active-bg)] text-[var(--text-primary)] font-medium'
+                                      : 'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]'
+                                  }`}
+                                >
+                                  <EyeOff className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                  <div>
+                                    <p>Hide from Education tab</p>
+                                    <p className="text-[11px] font-normal text-[var(--text-secondary)]">
+                                      Keep in document vault only
+                                    </p>
+                                  </div>
+                                </button>
+
+                                <div className="my-1 border-t border-[var(--border-subtle)]" />
+
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={() => {
+                                    setOpenDocMenuId(null);
+                                    setConfirmDeleteDocId((curr) => (curr === doc.id ? null : doc.id));
+                                  }}
+                                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs text-[var(--danger-text)] hover:bg-[var(--danger-bg)] cursor-pointer"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                                  <span>Delete document</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {isConfirmingDocDelete && (
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] px-3 py-2 text-xs">
+                            <span className="text-[var(--danger-text)]">
+                              Delete <strong>{doc.title}</strong>?
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <PillButton
+                                variant="secondary"
+                                size="sm"
+                                disabled={isDeletingDoc}
+                                onClick={() => setConfirmDeleteDocId(null)}
+                              >
+                                Cancel
+                              </PillButton>
+                              <button
+                                type="button"
+                                disabled={isDeletingDoc}
+                                onClick={() => void handleDeleteDocument(doc)}
+                                className="inline-flex h-8 cursor-pointer items-center justify-center rounded-full border border-[var(--danger-border)] bg-[var(--danger-text)] px-3 text-xs font-medium text-white"
+                              >
+                                {isDeletingDoc ? 'Deleting…' : 'Confirm'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </div>
           )}
         </div>
-          </>
-        )}
       </section>
 
       <EducationFormModal
         open={modalOpen}
         editingRecord={editingRecord}
         availableDocuments={documents}
+        documentsLoading={docsLoading}
+        documentsError={docsError}
+        onRetryDocuments={() => void loadDocumentsOnly()}
         onDocumentUploaded={(doc) => {
           setDocuments((prev) => [doc, ...prev]);
         }}
@@ -1092,6 +1232,29 @@ export const EducationPage: React.FC = () => {
           setEditingRecord(null);
         }}
         onSaved={handleSaved}
+      />
+
+      <DocumentDetailsModal
+        open={Boolean(selectedDetailDoc)}
+        doc={selectedDetailDoc}
+        categories={categories}
+        onClose={() => setSelectedDetailDoc(null)}
+        onUpdated={(updated) => {
+          setDocuments((prev) =>
+            prev.map((item) => (item.id === updated.id ? updated : item)),
+          );
+          setSelectedDetailDoc(updated);
+        }}
+        onDeleted={(deletedId) => {
+          setDocuments((prev) => prev.filter((item) => item.id !== deletedId));
+          setRecords((prev) =>
+            prev.map((edu) => ({
+              ...edu,
+              documents: (edu.documents ?? []).filter((ref) => ref.id !== deletedId),
+            })),
+          );
+          setSelectedDetailDoc(null);
+        }}
       />
     </div>
   );

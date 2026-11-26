@@ -13,6 +13,7 @@ import {
   VerificationSuccessPage,
   VerifyEmailPage,
 } from '@/features/auth/VerifyEmailPages';
+import { DocumentVaultPage } from '@/features/documents/DocumentVaultPage';
 import { EducationPage } from '@/features/education/EducationPage';
 import { HomePage } from '@/features/home/HomePage';
 import { OverviewPage } from '@/features/overview/OverviewPage';
@@ -23,7 +24,6 @@ import { ModuleScaffoldPage } from '@/features/workspace/ModuleScaffoldPage';
 import { WorkspaceLayout } from '@/layouts/WorkspaceLayout';
 import {
   certificatesService,
-  documentsService,
   experienceService,
   projectsService,
   resumesService,
@@ -137,23 +137,7 @@ export const App: React.FC = () => {
                   />
                 }
               />
-              <Route
-                path="documents"
-                element={
-                  <ModuleScaffoldPage
-                    sectionCode="MODULE 10 — DOCUMENT VAULT & OCR"
-                    title="Document Vault"
-                    description="Private-by-default file storage with signed previews and OCR review confirmation."
-                    contractEndpoints={[
-                      'POST /api/v1/documents',
-                      'GET /api/v1/documents/{id}/preview',
-                      'GET /api/v1/document-processing/review-queue',
-                      'POST /api/v1/document-processing/{job_id}/confirm',
-                    ]}
-                    loadCount={async () => (await documentsService.list()).total}
-                  />
-                }
-              />
+              <Route path="documents" element={<DocumentVaultPage />} />
               <Route
                 path="resumes"
                 element={

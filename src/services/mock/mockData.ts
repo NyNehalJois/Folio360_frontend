@@ -5,6 +5,8 @@ import type {
   CurrentUser,
   DashboardSummary,
   Document,
+  DocumentAnalysisResponse,
+  DocumentCategoryInfo,
   Education,
   Experience,
   Preferences,
@@ -247,7 +249,14 @@ export const MOCK_EDUCATION: Education[] = [
     computed_cgpa: 8.62,
     show_result_publicly: false,
     achievements: ['Department Technical Coordinator'],
-    documents: [],
+    documents: [
+      {
+        id: 'd4000000-0000-4000-8000-000000000001',
+        title: 'Semester V Provisional Marksheet',
+        category: 'marksheet',
+        mime_type: 'application/pdf',
+      },
+    ],
     visibility: 'public',
     created_at: '2026-09-01T09:00:00Z',
     updated_at: '2026-11-16T14:25:00Z',
@@ -325,9 +334,19 @@ export const MOCK_EXPERIENCE: Experience[] = [
   },
 ];
 
+export const MOCK_DOCUMENT_CATEGORIES: DocumentCategoryInfo[] = [
+  { key: 'marksheet', label: 'Marksheet' },
+  { key: 'certificate', label: 'Certificate' },
+  { key: 'resume', label: 'Resume' },
+  { key: 'identity', label: 'Identity' },
+  { key: 'project_report', label: 'Project Report' },
+  { key: 'other', label: 'Other' },
+];
+
 export const MOCK_DOCUMENTS: Document[] = [
   {
     id: 'd4000000-0000-4000-8000-000000000001',
+    user_id: MOCK_USER.id,
     title: 'Semester V Provisional Marksheet',
     original_filename: 'sem5_marksheet.pdf',
     category: 'marksheet',
@@ -337,19 +356,84 @@ export const MOCK_DOCUMENTS: Document[] = [
     sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     notes:
       '5th Semester Marksheet – B.E. Computer Science and Engineering. Issued by Visvesvaraya Technological University (VTU) for the Academic Year 2024–25. CGPA: 8.62.',
-    processing_status: 'confirmed',
+    processing_status: 'ready',
+    failure_reason: null,
     show_in_education: true,
     attached_to: [
       {
         entity_type: 'education',
         entity_id: 'ed000000-0000-4000-8000-000000000001',
-        label: 'B.E. CSE',
+        label: 'B.E. · R.V. College of Engineering',
       },
     ],
     uploaded_at: '2026-11-16T14:20:00Z',
     updated_at: '2026-11-16T14:21:00Z',
   },
 ];
+
+export const MOCK_DOCUMENT_ANALYSES: Record<string, DocumentAnalysisResponse> = {
+  'd4000000-0000-4000-8000-000000000001': {
+    id: 'da000000-0000-4000-8000-000000000001',
+    document_id: 'd4000000-0000-4000-8000-000000000001',
+    status: 'completed',
+    document_type: 'marksheet',
+    is_verified: false,
+    provider_name: 'mock',
+    model_name: 'mock-academic-v1',
+    analyzer_version: 'stage6-v1',
+    attempts: 1,
+    summary:
+      'Provisional Semester V B.E. Computer Science & Engineering marksheet listing two core subjects (unverified extraction).',
+    extracted_data: {
+      document_type: 'marksheet',
+      is_verified: false,
+      summary:
+        'Provisional Semester V B.E. Computer Science & Engineering marksheet listing two core subjects (unverified extraction).',
+      confidence: 0.92,
+      uncertain_fields: ['marksheet.subjects[1].grade'],
+      extracted_text_excerpt:
+        'VISVESVARAYA TECHNOLOGICAL UNIVERSITY — B.E. CSE SEMESTER V',
+      marksheet: {
+        institution_name: 'R.V. College of Engineering',
+        student_name: 'Alex Rivera',
+        program_or_course: 'B.E. Computer Science & Engineering',
+        semester_or_exam: 'Semester V',
+        academic_year: '2024-2025',
+        subjects: [
+          {
+            subject_name: 'Database Management Systems',
+            subject_code: '21CS52',
+            marks_obtained: 91,
+            max_marks: 100,
+            grade: 'S',
+            raw_mark_text: '91/100',
+            uncertain: false,
+          },
+          {
+            subject_name: 'Computer Networks',
+            subject_code: '21CS53',
+            marks_obtained: 85,
+            max_marks: 100,
+            grade: null,
+            raw_mark_text: '85',
+            uncertain: true,
+          },
+        ],
+        total_marks_obtained: 176,
+        total_max_marks: 200,
+        result_status: 'PASS',
+      },
+      certificate: null,
+    },
+    confidence: 0.92,
+    uncertain_fields: ['marksheet.subjects[1].grade'],
+    failure_reason: null,
+    started_at: '2026-11-16T14:21:05Z',
+    completed_at: '2026-11-16T14:21:08Z',
+    created_at: '2026-11-16T14:21:05Z',
+    updated_at: '2026-11-16T14:21:08Z',
+  },
+};
 
 export const MOCK_RESUMES: ResumeSummary[] = [
   {

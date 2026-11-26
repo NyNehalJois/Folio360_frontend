@@ -8,7 +8,7 @@ export { githubService } from './github.service';
 export { skillsService } from './skills.service';
 export { certificatesService } from './certificates.service';
 export { experienceService, achievementsService } from './experience.service';
-export { documentsService } from './documents.service';
+export { documentsService, openDocumentSignedUrl } from './documents.service';
 export { resumesService } from './resumes.service';
 export { publicService } from './public.service';
 export { sharingService } from './sharing.service';

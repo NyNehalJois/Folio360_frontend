@@ -1,14 +1,14 @@
 import { httpClient } from '@/services/http';
 import type {
   Document,
+  DocumentAnalysisResponse,
   DocumentCategory,
   DocumentCategoryInfo,
+  DocumentPreviewUrl,
+  DocumentUploadResponse,
   ItemsResponse,
   Paginated,
   PaginationParams,
-  ProcessingConfirm,
-  ProcessingJob,
-  ProcessingResult,
   SignedUrl,
   UUID,
 } from '@/types/api';
@@ -20,19 +20,24 @@ export const documentsService = {
 
   upload(
     file: File,
-    options?: { category?: DocumentCategory; title?: string; auto_process?: boolean },
-  ): Promise<{ document: Document; processing_job: ProcessingJob | null }> {
+    options?: {
+      category?: DocumentCategory;
+      title?: string;
+      notes?: string;
+      show_in_education?: boolean;
+    },
+  ): Promise<DocumentUploadResponse> {
     const formData = new FormData();
     formData.append('file', file);
     if (options?.category) formData.append('category', options.category);
     if (options?.title) formData.append('title', options.title);
-    if (options?.auto_process !== undefined) {
-      formData.append('auto_process', String(options.auto_process));
+    if (options?.notes !== undefined && options.notes !== '') {
+      formData.append('notes', options.notes);
     }
-    return httpClient.post<{ document: Document; processing_job: ProcessingJob | null }>(
-      '/documents',
-      formData,
-    );
+    if (options?.show_in_education !== undefined) {
+      formData.append('show_in_education', String(options.show_in_education));
+    }
+    return httpClient.post<DocumentUploadResponse>('/documents', formData);
   },
 
   list(
@@ -57,15 +62,19 @@ export const documentsService = {
     payload: {
       title?: string;
       category?: DocumentCategory;
-      notes?: string;
+      notes?: string | null;
       show_in_education?: boolean;
     },
   ): Promise<Document> {
     return httpClient.patch<Document>(`/documents/${documentId}`, payload);
   },
 
-  getPreviewUrl(documentId: UUID): Promise<SignedUrl & { mime_type: string }> {
-    return httpClient.get<SignedUrl & { mime_type: string }>(`/documents/${documentId}/preview`);
+  rescan(documentId: UUID): Promise<Document> {
+    return httpClient.post<Document>(`/documents/${documentId}/rescan`);
+  },
+
+  getPreviewUrl(documentId: UUID): Promise<DocumentPreviewUrl> {
+    return httpClient.get<DocumentPreviewUrl>(`/documents/${documentId}/preview`);
   },
 
   getDownloadUrl(documentId: UUID): Promise<SignedUrl> {
@@ -78,34 +87,36 @@ export const documentsService = {
     });
   },
 
-  /* --- Document Processing / OCR (§5.12) --- */
+  /* --- Stage 6: AI Document Analysis (/documents/{id}/analysis) --- */
 
-  startProcessing(documentId: UUID): Promise<ProcessingJob> {
-    return httpClient.post<ProcessingJob>(`/document-processing/${documentId}/start`);
+  requestAnalysis(documentId: UUID): Promise<DocumentAnalysisResponse> {
+    return httpClient.post<DocumentAnalysisResponse>(`/documents/${documentId}/analysis`);
   },
 
-  getReviewQueue(params?: PaginationParams): Promise<Paginated<ProcessingJob>> {
-    return httpClient.get<Paginated<ProcessingJob>>('/document-processing/review-queue', {
-      query: params as Record<string, string | number | undefined>,
-    });
+  getAnalysis(documentId: UUID): Promise<DocumentAnalysisResponse> {
+    return httpClient.get<DocumentAnalysisResponse>(`/documents/${documentId}/analysis`);
   },
 
-  getProcessingJob(jobId: UUID): Promise<ProcessingJob> {
-    return httpClient.get<ProcessingJob>(`/document-processing/${jobId}`);
-  },
-
-  getProcessingResult(jobId: UUID): Promise<ProcessingResult> {
-    return httpClient.get<ProcessingResult>(`/document-processing/${jobId}/result`);
-  },
-
-  confirmProcessing(
-    jobId: UUID,
-    payload: ProcessingConfirm,
-  ): Promise<{ document: Document; created_or_updated: { entity_type: string; entity_id: UUID } | null }> {
-    return httpClient.post(`/document-processing/${jobId}/confirm`, payload);
-  },
-
-  rejectProcessing(jobId: UUID): Promise<ProcessingJob> {
-    return httpClient.post<ProcessingJob>(`/document-processing/${jobId}/reject`);
+  retryAnalysis(documentId: UUID): Promise<DocumentAnalysisResponse> {
+    return httpClient.post<DocumentAnalysisResponse>(`/documents/${documentId}/analysis/retry`);
   },
 };
+
+export function openDocumentSignedUrl(
+  url: string,
+  kind: 'preview' | 'download',
+  filename?: string,
+): void {
+  if (kind === 'download' && url.startsWith('blob:') && typeof document !== 'undefined') {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || 'document';
+    link.rel = 'noopener noreferrer';
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    return;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
