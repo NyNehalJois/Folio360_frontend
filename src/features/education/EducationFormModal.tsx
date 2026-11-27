@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, Check, Globe, Lock, X } from 'lucide-react';
+import { AlertCircle, Check, FileText, Globe, Lock, X } from 'lucide-react';
 import { PillButton } from '@/design/components/PillButton';
+import { isDocumentReady } from '@/features/documents/DocumentStatusBadge';
+import {
+  formatDocumentCategory,
+  formatFileSize,
+} from '@/features/documents/DocumentUploadWidget';
 import { educationService } from '@/services/api/education.service';
-import type { Education, EducationCreate, EducationLevel, Visibility } from '@/types/api';
+import type { Document, Education, EducationCreate, EducationLevel, Visibility } from '@/types/api';
 import {
   EDUCATION_LEVEL_OPTIONS,
   MONTH_OPTIONS,
@@ -15,6 +20,7 @@ import {
 interface EducationFormModalProps {
   open: boolean;
   editingRecord: Education | null;
+  availableDocuments?: Document[];
   onClose: () => void;
   onSaved: (record: Education, mode: 'create' | 'edit') => void | Promise<void>;
 }
@@ -84,6 +90,14 @@ function buildUpdatePayload(
   if (nextDescription !== (editingRecord.description ?? null)) {
     patchPayload.description = nextDescription;
   }
+  const previousDocIds =
+    editingRecord.document_ids ?? (editingRecord.documents ?? []).map((doc) => doc.id);
+  const docsChanged =
+    values.document_ids.length !== previousDocIds.length ||
+    values.document_ids.some((id, index) => id !== previousDocIds[index]);
+  if (docsChanged) {
+    patchPayload.document_ids = values.document_ids;
+  }
   if (nextVisibility !== editingRecord.visibility) patchPayload.visibility = nextVisibility;
 
   return patchPayload;
@@ -105,6 +119,7 @@ function buildCreatePayload(values: EducationFormValues): EducationCreate {
     end_year: values.is_current ? null : Number(values.end_year),
     is_current: values.is_current,
     description: values.description.trim() || null,
+    document_ids: values.document_ids,
     visibility: values.visibility,
     result_type: null,
     result_value: null,
@@ -117,6 +132,7 @@ function buildCreatePayload(values: EducationFormValues): EducationCreate {
 export const EducationFormModal: React.FC<EducationFormModalProps> = ({
   open,
   editingRecord,
+  availableDocuments = [],
   onClose,
   onSaved,
 }) => {
@@ -187,6 +203,17 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
       delete next.end_year;
       delete next.date_range;
       return next;
+    });
+    if (submitError) setSubmitError(null);
+  };
+
+  const toggleDocumentAttachment = (documentId: string) => {
+    setValues((prev) => {
+      const exists = prev.document_ids.includes(documentId);
+      const nextIds = exists
+        ? prev.document_ids.filter((id) => id !== documentId)
+        : [...prev.document_ids, documentId];
+      return { ...prev, document_ids: nextIds };
     });
     if (submitError) setSubmitError(null);
   };
@@ -612,6 +639,79 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
               />
               {errors.description && (
                 <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.description}</p>
+              )}
+            </section>
+
+            {/* Attached Vault Documents */}
+            <section
+              aria-labelledby="edu-section-documents"
+              className="border-t border-[var(--border-subtle)] pt-5"
+            >
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 id="edu-section-documents" className={SECTION_HEADING_CLASS}>
+                    Attached Vault Documents <span className="opacity-70">(Optional)</span>
+                  </h3>
+                  <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                    Link files from your Document Vault directly to this education entry.
+                  </p>
+                </div>
+                {values.document_ids.length > 0 && (
+                  <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--text-secondary)]">
+                    {values.document_ids.length} selected
+                  </span>
+                )}
+              </div>
+
+              {availableDocuments.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-[var(--border-medium)] bg-[var(--bg-main)]/50 px-4 py-3 text-xs text-[var(--text-secondary)]">
+                  No documents in your vault yet. Upload files in Your Academic Documents or the
+                  Document Vault to attach them here.
+                </p>
+              ) : (
+                <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
+                  {availableDocuments.map((doc) => {
+                    const checked = values.document_ids.includes(doc.id);
+                    const ready = isDocumentReady(doc);
+                    const disabled = saving || (!ready && !checked);
+                    return (
+                      <label
+                        key={doc.id}
+                        className={`flex items-start gap-3 rounded-lg border px-3.5 py-2.5 text-xs transition-colors ${
+                          checked
+                            ? 'border-[var(--border-accent)] bg-[var(--nav-active-bg)]'
+                            : 'border-[var(--border-subtle)] bg-[var(--bg-main)]'
+                        } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-[var(--border-medium)]'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={() => toggleDocumentAttachment(doc.id)}
+                          className="mt-0.5 h-4 w-4 rounded border-[var(--border-medium)] accent-[var(--accent)]"
+                        />
+                        <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate font-medium text-[var(--text-primary)]">
+                              {doc.title}
+                            </span>
+                            <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)]">
+                              {formatDocumentCategory(doc.category)}
+                            </span>
+                            <span className="font-mono text-[10px] text-[var(--text-secondary)]">
+                              {formatFileSize(doc.size_bytes)}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 truncate font-mono text-[10px] text-[var(--text-secondary)]">
+                            {doc.original_filename}
+                            {!ready ? ` · ${doc.processing_status.replace('_', ' ')}` : ''}
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
               )}
             </section>
 

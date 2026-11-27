@@ -1215,6 +1215,7 @@ export const EducationPage: React.FC = () => {
       <EducationFormModal
         open={modalOpen}
         editingRecord={editingRecord}
+        availableDocuments={documents}
         onClose={() => {
           if (!modalOpen) return;
           setModalOpen(false);

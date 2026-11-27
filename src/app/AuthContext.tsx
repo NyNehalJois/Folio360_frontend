@@ -6,6 +6,8 @@ import type { CurrentUser } from '@/types/api';
 export interface RegisterOutcome {
   user: CurrentUser;
   requiresVerification: boolean;
+  verificationEmailSent: boolean;
+  message?: string;
 }
 
 interface AuthContextValue {
@@ -81,7 +83,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(res.user);
       }
 
-      return { user: res.user, requiresVerification };
+      return {
+        user: res.user,
+        requiresVerification,
+        verificationEmailSent: res.verification_email_sent !== false,
+        message: res.message,
+      };
     },
     [],
   );

@@ -9,10 +9,15 @@ import type {
   DocumentRef,
   Education,
   EducationCreate,
+  GithubConnection,
+  GithubRepo,
   Paginated,
   Preferences,
   Profile,
   ProfileUpdate,
+  Project,
+  ProjectCreate,
+  ProjectImage,
   PublicSettings,
 } from '@/types/api';
 import {
@@ -48,6 +53,8 @@ const MOCK_VISIBILITIES_KEY = 'f360_mock_visibilities';
 const MOCK_EDUCATIONS_KEY = 'f360_mock_educations';
 const MOCK_DOCUMENTS_KEY = 'f360_mock_documents';
 const MOCK_ANALYSES_KEY = 'f360_mock_document_analyses';
+const MOCK_PROJECTS_KEY = 'f360_mock_projects';
+const MOCK_GITHUB_KEY = 'f360_mock_github';
 
 function readMockSessionFlag(): string | null {
   try {
@@ -232,6 +239,89 @@ const mockVisibilities = loadMockVisibilities();
 const mockEducations = loadMockEducations();
 const mockDocuments = loadMockDocuments();
 const mockAnalyses = loadMockAnalyses();
+
+function loadMockProjects(): Map<string, Project[]> {
+  const map = new Map<string, Project[]>([[MOCK_USER.id, structuredClone(MOCK_PROJECTS)]]);
+  try {
+    const raw = sessionStorage.getItem(MOCK_PROJECTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as [string, Project[]][];
+      for (const [k, v] of parsed) map.set(k, v);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  return map;
+}
+
+function saveMockProjects(map: Map<string, Project[]>): void {
+  try {
+    sessionStorage.setItem(MOCK_PROJECTS_KEY, JSON.stringify(Array.from(map.entries())));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function loadMockGithub(): Map<string, GithubConnection> {
+  const map = new Map<string, GithubConnection>();
+  try {
+    const raw = sessionStorage.getItem(MOCK_GITHUB_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as [string, GithubConnection][];
+      for (const [k, v] of parsed) map.set(k, v);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  return map;
+}
+
+function saveMockGithub(map: Map<string, GithubConnection>): void {
+  try {
+    sessionStorage.setItem(MOCK_GITHUB_KEY, JSON.stringify(Array.from(map.entries())));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+const mockProjects = loadMockProjects();
+const mockGithub = loadMockGithub();
+
+const MOCK_GITHUB_REPOS_CATALOG: Omit<GithubRepo, 'already_imported'>[] = [
+  {
+    full_name: 'alex-dev/neural-search-engine',
+    name: 'neural-search-engine',
+    description: 'Semantic vector search microservice built with FastAPI and pgvector.',
+    html_url: 'https://github.com/alex-dev/neural-search-engine',
+    homepage: 'https://search.alex.dev',
+    languages: { Python: 42000, TypeScript: 12000 },
+    topics: ['fastapi', 'pgvector', 'semantic-search'],
+    stars: 34,
+    private: false,
+    updated_at: '2026-11-18T10:00:00Z',
+  },
+  {
+    full_name: 'alex-dev/folio-cli',
+    name: 'folio-cli',
+    description: 'Terminal helper for exporting academic portfolios to Markdown and PDF.',
+    html_url: 'https://github.com/alex-dev/folio-cli',
+    homepage: null,
+    languages: { TypeScript: 18500 },
+    topics: ['cli', 'typescript'],
+    stars: 12,
+    private: true,
+    updated_at: '2026-11-10T15:30:00Z',
+  },
+];
+
+function getOrCreateProjects(userId: string): Project[] {
+  const existing = mockProjects.get(userId);
+  if (existing) return existing;
+  const fresh: Project[] = [];
+  mockProjects.set(userId, fresh);
+  saveMockProjects(mockProjects);
+  return fresh;
+}
 
 function getOrCreateEducations(userId: string): Education[] {
   const existing = mockEducations.get(userId);
@@ -1612,8 +1702,243 @@ async function handleMockRequest(
     }
   }
 
+  // --- Projects Portfolio ---
+  if (path === '/projects') {
+    const acct = requireMockAuth(options);
+    const items = getOrCreateProjects(acct.user.id);
+    if (method === 'GET') {
+      const vis = options.query?.visibility as string | undefined;
+      const q = String(options.query?.q ?? '').trim().toLowerCase();
+      const filtered = items.filter((item) => {
+        if (vis && item.visibility !== vis) return false;
+        if (q && !item.title.toLowerCase().includes(q) && !item.summary.toLowerCase().includes(q)) {
+          return false;
+        }
+        return true;
+      });
+      return paginate(filtered, options);
+    }
+    if (method === 'POST') {
+      const body = (options.body ?? {}) as Partial<ProjectCreate>;
+      if (!body.title?.trim() || !body.summary?.trim()) {
+        throw new ApiClientError(422, 'VALIDATION_ERROR', 'Title and summary are required.');
+      }
+      const now = new Date().toISOString();
+      const created: Project = {
+        id: crypto.randomUUID(),
+        title: body.title.trim(),
+        summary: body.summary.trim(),
+        description: body.description?.trim() || undefined,
+        category: body.category?.trim() || 'General',
+        technologies: body.technologies ?? [],
+        skills: [],
+        github_url: body.github_url ?? null,
+        live_url: body.live_url ?? null,
+        start_date: body.start_date ?? null,
+        end_date: body.is_ongoing ? null : (body.end_date ?? null),
+        is_ongoing: Boolean(body.is_ongoing),
+        images: [],
+        report_document: null,
+        github_import: null,
+        featured: Boolean(body.featured),
+        order: body.order ?? 0,
+        visibility: body.visibility ?? 'private',
+        created_at: now,
+        updated_at: now,
+      };
+      mockProjects.set(acct.user.id, [created, ...items]);
+      saveMockProjects(mockProjects);
+      return created;
+    }
+  }
+
+  if (path.startsWith('/projects/')) {
+    const acct = requireMockAuth(options);
+    const items = getOrCreateProjects(acct.user.id);
+    const rest = path.replace('/projects/', '');
+    const parts = rest.split('/');
+    const projectId = decodeURIComponent(parts[0]);
+    const idx = items.findIndex((item) => item.id === projectId);
+    if (idx === -1) {
+      throw new ApiClientError(404, 'PROJECT_NOT_FOUND', 'Project not found.');
+    }
+
+    if (parts.length === 1) {
+      if (method === 'GET') return items[idx];
+      if (method === 'PATCH') {
+        const body = (options.body ?? {}) as Partial<ProjectCreate>;
+        const existing = items[idx];
+        const nextOngoing = body.is_ongoing ?? existing.is_ongoing;
+        const updated: Project = {
+          ...existing,
+          title: body.title?.trim() ?? existing.title,
+          summary: body.summary?.trim() ?? existing.summary,
+          description: body.description !== undefined ? body.description : existing.description,
+          category: body.category?.trim() ?? existing.category,
+          technologies: body.technologies ?? existing.technologies,
+          github_url: body.github_url !== undefined ? body.github_url : existing.github_url,
+          live_url: body.live_url !== undefined ? body.live_url : existing.live_url,
+          start_date: body.start_date !== undefined ? body.start_date : existing.start_date,
+          end_date: nextOngoing ? null : (body.end_date !== undefined ? body.end_date : existing.end_date),
+          is_ongoing: nextOngoing,
+          featured: body.featured ?? existing.featured,
+          order: body.order ?? existing.order,
+          visibility: body.visibility ?? existing.visibility,
+          updated_at: new Date().toISOString(),
+        };
+        const next = [...items];
+        next[idx] = updated;
+        mockProjects.set(acct.user.id, next);
+        saveMockProjects(mockProjects);
+        return updated;
+      }
+      if (method === 'DELETE') {
+        mockProjects.set(acct.user.id, items.filter((item) => item.id !== projectId));
+        saveMockProjects(mockProjects);
+        return undefined;
+      }
+    }
+
+    if (parts[1] === 'images' && parts.length === 2 && method === 'POST') {
+      const form = options.body as FormData;
+      const file = form.get('file') as File | null;
+      const alt = (form.get('alt') as string | null) ?? null;
+      const imageUrl = file ? URL.createObjectURL(file) : '';
+      const newImage: ProjectImage = {
+        id: crypto.randomUUID(),
+        url: imageUrl,
+        alt,
+        order: items[idx].images.length,
+      };
+      const next = [...items];
+      next[idx] = { ...items[idx], images: [...items[idx].images, newImage] };
+      mockProjects.set(acct.user.id, next);
+      saveMockProjects(mockProjects);
+      return newImage;
+    }
+
+    if (parts[1] === 'images' && parts.length === 3 && method === 'DELETE') {
+      const imageId = decodeURIComponent(parts[2]);
+      const next = [...items];
+      next[idx] = {
+        ...items[idx],
+        images: items[idx].images.filter((img) => img.id !== imageId),
+      };
+      mockProjects.set(acct.user.id, next);
+      saveMockProjects(mockProjects);
+      return undefined;
+    }
+  }
+
+  // --- GitHub Integration ---
+  if (path === '/github/connection') {
+    const acct = requireMockAuth(options);
+    if (method === 'GET') {
+      return (
+        mockGithub.get(acct.user.id) ?? {
+          connected: false,
+          username: null,
+          avatar_url: null,
+          connected_at: null,
+        }
+      );
+    }
+    if (method === 'DELETE') {
+      mockGithub.delete(acct.user.id);
+      saveMockGithub(mockGithub);
+      return undefined;
+    }
+  }
+
+  if (path === '/github/connect' && method === 'POST') {
+    const acct = requireMockAuth(options);
+    const conn: GithubConnection = {
+      connected: true,
+      username: 'alex-dev',
+      avatar_url: null,
+      connected_at: new Date().toISOString(),
+    };
+    mockGithub.set(acct.user.id, conn);
+    saveMockGithub(mockGithub);
+    return {
+      authorization_url: `${window.location.origin}/workspace/projects?github=connected`,
+    };
+  }
+
+  if (path === '/github/repositories' && method === 'GET') {
+    const acct = requireMockAuth(options);
+    if (!mockGithub.get(acct.user.id)?.connected) {
+      throw new ApiClientError(400, 'GITHUB_NOT_CONNECTED', 'Connect GitHub first.');
+    }
+    const items = getOrCreateProjects(acct.user.id);
+    const importedNames = new Set(
+      items.map((p) => p.github_import?.repo_full_name.toLowerCase()).filter(Boolean),
+    );
+    const q = String(options.query?.q ?? '').trim().toLowerCase();
+    const mapped: GithubRepo[] = MOCK_GITHUB_REPOS_CATALOG.filter(
+      (r) => !q || r.full_name.toLowerCase().includes(q) || (r.description ?? '').toLowerCase().includes(q),
+    ).map((r) => ({
+      ...r,
+      already_imported: importedNames.has(r.full_name.toLowerCase()),
+    }));
+    return paginate(mapped, options);
+  }
+
+  if (path === '/github/repositories/import' && method === 'POST') {
+    const acct = requireMockAuth(options);
+    const body = (options.body ?? {}) as { repos?: { full_name: string }[] };
+    const items = getOrCreateProjects(acct.user.id);
+    const importedNames = new Set(
+      items.map((p) => p.github_import?.repo_full_name.toLowerCase()).filter(Boolean),
+    );
+    const created: Project[] = [];
+    const skipped: { full_name: string; reason: string }[] = [];
+    const now = new Date().toISOString();
+    for (const req of body.repos ?? []) {
+      const repo = MOCK_GITHUB_REPOS_CATALOG.find(
+        (r) => r.full_name.toLowerCase() === req.full_name.toLowerCase(),
+      );
+      if (!repo) {
+        skipped.push({ full_name: req.full_name, reason: 'Repository not found' });
+        continue;
+      }
+      if (importedNames.has(repo.full_name.toLowerCase())) {
+        skipped.push({ full_name: repo.full_name, reason: 'Already imported' });
+        continue;
+      }
+      const proj: Project = {
+        id: crypto.randomUUID(),
+        title: repo.name,
+        summary: repo.description ?? `Imported from ${repo.full_name}`,
+        description: repo.description ?? undefined,
+        category: 'Software',
+        technologies: [...Object.keys(repo.languages), ...repo.topics].slice(0, 6),
+        skills: [],
+        github_url: repo.html_url,
+        live_url: repo.homepage,
+        start_date: null,
+        end_date: null,
+        is_ongoing: false,
+        images: [],
+        report_document: null,
+        github_import: { repo_full_name: repo.full_name, imported_at: now },
+        featured: false,
+        order: items.length + created.length,
+        visibility: 'private',
+        created_at: now,
+        updated_at: now,
+      };
+      importedNames.add(repo.full_name.toLowerCase());
+      created.push(proj);
+    }
+    if (created.length > 0) {
+      mockProjects.set(acct.user.id, [...created, ...items]);
+      saveMockProjects(mockProjects);
+    }
+    return { created, skipped };
+  }
+
   // --- Portfolio Collections ---
-  if (method === 'GET' && path === '/projects') return paginate(MOCK_PROJECTS, options);
   if (method === 'GET' && path === '/skills/me') return paginate(MOCK_SKILLS, options);
   if (method === 'GET' && path === '/certificates') return paginate(MOCK_CERTIFICATES, options);
   if (method === 'GET' && path === '/experience') return paginate(MOCK_EXPERIENCE, options);
@@ -1692,6 +2017,21 @@ async function handleMockRequest(
         category: d.category,
         mime_type: d.mime_type,
       }));
+    const publicProjects = getOrCreateProjects(targetAccount.user.id)
+      .filter((p) => p.visibility === 'public')
+      .map((p) => ({
+        title: p.title,
+        summary: p.summary,
+        description: p.description,
+        category: p.category,
+        technologies: p.technologies,
+        images: p.images.map((img) => ({ url: img.url, alt: img.alt })),
+        github_url: p.github_url ?? undefined,
+        live_url: p.live_url ?? undefined,
+        start_date: p.start_date ?? undefined,
+        end_date: p.end_date ?? undefined,
+        featured: p.featured,
+      }));
     return {
       slug: prof.slug,
       full_name: prof.full_name,
@@ -1713,7 +2053,7 @@ async function handleMockRequest(
         education_documents: vis.public_sections.education
           ? selectedEducationDocuments
           : undefined,
-        projects: vis.public_sections.projects ? MOCK_PUBLIC_PROFILE.sections.projects : undefined,
+        projects: vis.public_sections.projects ? publicProjects : undefined,
         skills: vis.public_sections.skills ? MOCK_PUBLIC_PROFILE.sections.skills : undefined,
         certificates: vis.public_sections.certificates
           ? MOCK_PUBLIC_PROFILE.sections.certificates

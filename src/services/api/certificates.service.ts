@@ -1,14 +1,23 @@
 import { httpClient } from '@/services/http';
 import type {
   Certificate,
+  CertificateCategory,
   CertificateCreate,
   Paginated,
   PaginationParams,
   UUID,
+  Visibility,
 } from '@/types/api';
 
 export const certificatesService = {
-  list(params?: PaginationParams & { q?: string }): Promise<Paginated<Certificate>> {
+  list(
+    params?: PaginationParams & {
+      q?: string;
+      category?: CertificateCategory;
+      visibility?: Visibility;
+      featured?: boolean;
+    },
+  ): Promise<Paginated<Certificate>> {
     return httpClient.get<Paginated<Certificate>>('/certificates', {
       query: params as Record<string, string | number | undefined>,
     });

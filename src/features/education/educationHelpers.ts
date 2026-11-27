@@ -102,6 +102,7 @@ export interface EducationFormValues {
   end_year: string;
   is_current: boolean;
   description: string;
+  document_ids: string[];
   visibility: Visibility;
 }
 
@@ -124,6 +125,7 @@ export function toInitialFormValues(record?: Education | null): EducationFormVal
       end_year: '',
       is_current: false,
       description: '',
+      document_ids: [],
       visibility: 'private',
     };
   }
@@ -143,6 +145,7 @@ export function toInitialFormValues(record?: Education | null): EducationFormVal
     end_year: !record.is_current && record.end_year ? String(record.end_year) : '',
     is_current: record.is_current,
     description: record.description ?? '',
+    document_ids: record.document_ids ?? (record.documents ?? []).map((d) => d.id),
     visibility: record.visibility,
   };
 }

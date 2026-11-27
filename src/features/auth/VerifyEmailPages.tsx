@@ -34,11 +34,14 @@ export const VerifyEmailPage: React.FC = () => {
     (inFlightRef.current.promise as ReturnType<typeof authService.verifyEmail>)
       .then((verifiedUser) => {
         if (!active) return;
+        const verifiedEmail = verifiedUser?.email;
         navigate(
-          `/auth/verification-success?email=${encodeURIComponent(verifiedUser.email)}`,
+          verifiedEmail
+            ? `/auth/verification-success?email=${encodeURIComponent(verifiedEmail)}`
+            : '/auth/verification-success',
           {
             replace: true,
-            state: { email: verifiedUser.email },
+            state: verifiedEmail ? { email: verifiedEmail } : undefined,
           },
         );
       })
@@ -85,8 +88,15 @@ export const VerifyEmailPage: React.FC = () => {
 export const VerificationSentPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
-  const stateEmail = (location.state as { email?: string } | null)?.email;
+  const routeState = location.state as {
+    email?: string;
+    verificationEmailSent?: boolean;
+    deliveryMessage?: string;
+  } | null;
+  const stateEmail = routeState?.email;
   const initialEmail = searchParams.get('email') || stateEmail || '';
+  const initialDeliveryFailed = routeState?.verificationEmailSent === false;
+  const initialDeliveryMessage = routeState?.deliveryMessage;
 
   const [emailInput, setEmailInput] = useState(initialEmail);
   const [emailError, setEmailError] = useState<string | undefined>();
@@ -130,11 +140,13 @@ export const VerificationSentPage: React.FC = () => {
   return (
     <AuthShell
       eyebrow="VERIFY YOUR EMAIL"
-      heading="Check your inbox."
+      heading={initialDeliveryFailed && !resent ? 'Verification email not sent.' : 'Check your inbox.'}
       description={
-        initialEmail
-          ? `We sent a verification link to ${initialEmail}. Verify your email before signing in.`
-          : 'Enter your email address to resend a fresh verification link.'
+        initialDeliveryFailed && !resent
+          ? 'Your account was created, but we could not deliver the verification email right now.'
+          : initialEmail
+            ? `We sent a verification link to ${initialEmail}. Verify your email before signing in.`
+            : 'Enter your email address to resend a fresh verification link.'
       }
       footer={
         <span>
@@ -145,6 +157,15 @@ export const VerificationSentPage: React.FC = () => {
         </span>
       }
     >
+      {initialDeliveryFailed && !resent && (
+        <div className="mb-4">
+          <AuthAlert tone="error">
+            {initialDeliveryMessage ||
+              'Verification email delivery failed. Please use the button below to resend.'}
+          </AuthAlert>
+        </div>
+      )}
+
       <div className="mb-5 flex items-start gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/55 p-4">
         <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" />
         <div className="text-xs leading-relaxed text-[var(--text-secondary)]">
@@ -160,8 +181,9 @@ export const VerificationSentPage: React.FC = () => {
       {resent && (
         <div className="mb-4">
           <AuthAlert tone="success">
-            A fresh verification email has been sent to{' '}
-            <span className="font-medium text-[var(--text-primary)]">{emailInput.trim()}</span>.
+            If an unverified account exists for{' '}
+            <span className="font-medium text-[var(--text-primary)]">{emailInput.trim()}</span>, a
+            fresh verification link has been sent.
           </AuthAlert>
         </div>
       )}

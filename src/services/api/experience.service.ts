@@ -1,6 +1,7 @@
 import { httpClient } from '@/services/http';
 import type {
   Achievement,
+  AchievementCategory,
   AchievementCreate,
   Experience,
   ExperienceCreate,
@@ -8,12 +9,20 @@ import type {
   Paginated,
   PaginationParams,
   UUID,
+  Visibility,
 } from '@/types/api';
 
 export const experienceService = {
-  list(params?: PaginationParams & { type?: ExperienceType }): Promise<Paginated<Experience>> {
+  list(
+    params?: PaginationParams & {
+      type?: ExperienceType;
+      visibility?: Visibility;
+      featured?: boolean;
+      q?: string;
+    },
+  ): Promise<Paginated<Experience>> {
     return httpClient.get<Paginated<Experience>>('/experience', {
-      query: params as Record<string, string | number | undefined>,
+      query: params as Record<string, string | number | boolean | undefined>,
     });
   },
 
@@ -35,7 +44,14 @@ export const experienceService = {
 };
 
 export const achievementsService = {
-  list(params?: PaginationParams): Promise<Paginated<Achievement>> {
+  list(
+    params?: PaginationParams & {
+      q?: string;
+      category?: AchievementCategory;
+      visibility?: Visibility;
+      featured?: boolean;
+    },
+  ): Promise<Paginated<Achievement>> {
     return httpClient.get<Paginated<Achievement>>('/achievements', {
       query: params as Record<string, string | number | undefined>,
     });

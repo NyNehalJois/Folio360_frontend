@@ -84,6 +84,8 @@ export const OverviewPage: React.FC = () => {
 
   const quickActions = [
     { label: 'Add Education', to: '/workspace/education', icon: Plus },
+    { label: 'Add Experience', to: '/workspace/experience', icon: Plus },
+    { label: 'Certificates & Achievements', to: '/workspace/certificates', icon: Plus },
     { label: 'Education & Vault', to: '/workspace/education#education-documents', icon: Upload },
     { label: 'Generate Resume', to: '/workspace/resumes', icon: FileText },
     { label: 'Profile Settings', to: '/workspace/profile', icon: ArrowUpRight },

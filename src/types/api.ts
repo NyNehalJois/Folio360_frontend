@@ -159,6 +159,8 @@ export interface CurrentUser {
 
 export interface AuthResponse extends TokenResponse {
   user: CurrentUser;
+  message?: string;
+  verification_email_sent?: boolean;
 }
 
 export interface Session {
@@ -173,6 +175,7 @@ export interface Session {
 export interface OAuthExchangeRequest {
   code: string;
   code_verifier?: string;
+  exchange_code_verifier?: string;
 }
 
 /* --- 5.2 Account (/account) --- */
@@ -603,6 +606,7 @@ export interface GithubRepo {
   languages: Record<string, number>;
   topics: string[];
   stars: number;
+  private?: boolean;
   updated_at: Timestamp;
   already_imported: boolean;
 }
@@ -671,23 +675,38 @@ export interface SkillSuggestion {
 
 /* --- 5.9 Certificates (/certificates) --- */
 
+export type CertificateCategory =
+  | 'course'
+  | 'professional'
+  | 'training'
+  | 'workshop'
+  | 'participation'
+  | 'academic'
+  | 'other';
+
 export interface CertificateCreate {
   name: string;
   issuer: string;
+  category?: CertificateCategory;
   issue_date?: DateString | null;
   expiry_date?: DateString | null;
   credential_id?: string | null;
   verification_url?: string | null;
   document_id?: UUID | null;
   skill_ids: UUID[];
+  featured?: boolean;
+  order?: number;
   visibility: Visibility;
 }
 
 export interface Certificate extends Omit<CertificateCreate, 'document_id' | 'skill_ids'> {
   id: UUID;
+  category?: CertificateCategory;
   verification_status: 'self_reported' | 'link_provided' | 'issuer_verified';
   document: DocumentRef | null;
   skills: { id: UUID; name: string }[];
+  featured?: boolean;
+  order?: number;
   created_at: Timestamp;
   updated_at: Timestamp;
 }
@@ -697,6 +716,8 @@ export interface Certificate extends Omit<CertificateCreate, 'document_id' | 'sk
 export type ExperienceType =
   | 'internship'
   | 'employment'
+  | 'freelance'
+  | 'research'
   | 'volunteering'
   | 'mentorship'
   | 'leadership'
@@ -707,13 +728,17 @@ export interface ExperienceCreate {
   organization: string;
   role: string;
   location?: string | null;
+  is_remote?: boolean;
+  organization_url?: string | null;
   start_date: DateString;
   end_date?: DateString | null;
   is_current: boolean;
-  description?: string;
+  description?: string | null;
   highlights: string[];
   skill_ids: UUID[];
   document_ids: UUID[];
+  featured?: boolean;
+  order?: number;
   visibility: Visibility;
 }
 
@@ -730,6 +755,10 @@ export type AchievementCategory =
   | 'competition'
   | 'publication'
   | 'scholarship'
+  | 'academic_distinction'
+  | 'hackathon'
+  | 'leadership'
+  | 'extracurricular'
   | 'other';
 
 export interface AchievementCreate {
@@ -739,12 +768,16 @@ export interface AchievementCreate {
   date?: DateString | null;
   description?: string;
   document_ids: UUID[];
+  featured?: boolean;
+  order?: number;
   visibility: Visibility;
 }
 
 export interface Achievement extends Omit<AchievementCreate, 'document_ids'> {
   id: UUID;
   documents: DocumentRef[];
+  featured?: boolean;
+  order?: number;
   created_at: Timestamp;
   updated_at: Timestamp;
 }
@@ -782,7 +815,7 @@ export interface DocumentCategoryInfo {
 }
 
 export interface DocumentAttachedToItem {
-  entity_type: 'education';
+  entity_type: 'education' | 'certificate' | 'achievement' | 'experience';
   entity_id: UUID;
   label: string;
 }
@@ -1073,27 +1106,36 @@ export interface PublicProfile {
     certificates?: {
       name: string;
       issuer: string;
-      issue_date?: string;
-      credential_id?: string;
-      verification_url?: string;
+      category?: string;
+      issue_date?: string | null;
+      expiry_date?: string | null;
+      credential_id?: string | null;
+      verification_url?: string | null;
       verification_status: string;
+      featured?: boolean;
     }[];
     experience?: {
       type: string;
       organization: string;
       role: string;
+      location?: string | null;
+      is_remote?: boolean;
+      organization_url?: string | null;
       start_date: string;
       end_date: string | null;
       is_current: boolean;
-      description?: string;
+      description?: string | null;
       highlights: string[];
+      skills?: string[];
+      featured?: boolean;
     }[];
     achievements?: {
       title: string;
       category: string;
-      organization?: string;
-      date?: string;
-      description?: string;
+      organization?: string | null;
+      date?: string | null;
+      description?: string | null;
+      featured?: boolean;
     }[];
   };
 }

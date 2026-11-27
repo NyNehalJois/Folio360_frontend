@@ -9,7 +9,6 @@ import {
   Loader2,
   RefreshCw,
   Search,
-  Sparkles,
   Upload,
 } from 'lucide-react';
 import {
@@ -26,7 +25,6 @@ import type {
   DocumentCategoryInfo,
   DocumentProcessingStatus,
 } from '@/types/api';
-import { DocumentAnalysisModal } from './DocumentAnalysisModal';
 import { DocumentDetailsModal } from './DocumentDetailsModal';
 import {
   canRescanDocument,
@@ -77,7 +75,6 @@ export const DocumentVaultPage: React.FC = () => {
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'title'>('newest');
 
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
-  const [analysisDocId, setAnalysisDocId] = useState<string | null>(null);
   const [busyDocId, setBusyDocId] = useState<string | null>(null);
   const [banner, setBanner] = useState<{
     tone: 'success' | 'error';
@@ -113,10 +110,6 @@ export const DocumentVaultPage: React.FC = () => {
   const selectedDoc = useMemo(
     () => documents.find((doc) => doc.id === selectedDocId) ?? null,
     [documents, selectedDocId],
-  );
-  const analysisDoc = useMemo(
-    () => documents.find((doc) => doc.id === analysisDocId) ?? null,
-    [documents, analysisDocId],
   );
 
   const filteredDocuments = useMemo(() => {
@@ -557,15 +550,6 @@ export const DocumentVaultPage: React.FC = () => {
                           <Download className="h-3.5 w-3.5" />
                           Download
                         </PillButton>
-                        <PillButton
-                          variant="ghost"
-                          size="sm"
-                          disabled={isBusy}
-                          onClick={() => setAnalysisDocId(doc.id)}
-                        >
-                          <Sparkles className="h-3.5 w-3.5 text-[var(--accent)]" />
-                          Analyze
-                        </PillButton>
                       </>
                     )}
 
@@ -611,20 +595,11 @@ export const DocumentVaultPage: React.FC = () => {
         }}
         onDeleted={(deletedId) => {
           setDocuments((prev) => prev.filter((item) => item.id !== deletedId));
-          if (analysisDocId === deletedId) {
-            setAnalysisDocId(null);
-          }
           setBanner({
             tone: 'success',
             message: 'Document removed from your Document Vault.',
           });
         }}
-      />
-
-      <DocumentAnalysisModal
-        open={Boolean(analysisDoc)}
-        doc={analysisDoc}
-        onClose={() => setAnalysisDocId(null)}
       />
     </div>
   );

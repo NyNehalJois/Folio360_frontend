@@ -112,21 +112,33 @@ export const authService = {
     },
   ): string {
     const base = API_CONFIG.apiBaseUrl.replace(/\/$/, '');
-    const params = new URLSearchParams({ client_type: 'web' });
-    if (options?.redirectTo) params.set('redirect_to', options.redirectTo);
-    if (options?.state) params.set('state', options.state);
+    const defaultCallbackUri =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/auth/oauth/callback`
+        : 'http://localhost:5173/auth/oauth/callback';
+    const params = new URLSearchParams({
+      client_type: 'web',
+      redirect_uri: options?.redirectUri ?? defaultCallbackUri,
+    });
     if (options?.codeChallenge) {
-      params.set('code_challenge', options.codeChallenge);
-      params.set('code_challenge_method', options.codeChallengeMethod ?? 'S256');
+      params.set('exchange_code_challenge', options.codeChallenge);
+      params.set('exchange_code_challenge_method', options.codeChallengeMethod ?? 'S256');
     }
-    if (options?.redirectUri) params.set('redirect_uri', options.redirectUri);
-    return `${base}/auth/${provider}?${params.toString()}`;
+    return `${base}/auth/oauth/${provider}/start?${params.toString()}`;
   },
 
   async exchangeOAuthCode(payload: OAuthExchangeRequest): Promise<AuthResponse> {
-    const res = await httpClient.post<AuthResponse>('/auth/oauth/exchange', payload, {
-      skipAuth: true,
-    });
+    const res = await httpClient.post<AuthResponse>(
+      '/auth/oauth/exchange',
+      {
+        code: payload.code,
+        exchange_code_verifier: payload.exchange_code_verifier ?? payload.code_verifier,
+      },
+      {
+        headers: { 'X-Client-Type': 'web' },
+        skipAuth: true,
+      },
+    );
     tokenStore.setAccessToken(res.access_token);
     return { ...res, user: normalizeCurrentUser(res.user) };
   },

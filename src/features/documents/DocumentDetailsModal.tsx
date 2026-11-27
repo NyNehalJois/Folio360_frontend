@@ -7,7 +7,6 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
-  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
@@ -19,7 +18,6 @@ import type {
   DocumentCategory,
   DocumentCategoryInfo,
 } from '@/types/api';
-import { DocumentAnalysisModal } from './DocumentAnalysisModal';
 import {
   canRescanDocument,
   DocumentStatusBadge,
@@ -79,7 +77,6 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
   );
   const [linkedCount, setLinkedCount] = useState<number>(0);
   const [deleting, setDeleting] = useState(false);
-  const [analysisOpen, setAnalysisOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -97,7 +94,6 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     setRefreshing(false);
     setFetchingAction(null);
     setDeleting(false);
-    setAnalysisOpen(false);
   }, [open, doc]);
 
   const busy =
@@ -108,7 +104,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     deleting;
 
   useEffect(() => {
-    if (!open || analysisOpen) return;
+    if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !busy) {
         onClose();
@@ -116,7 +112,7 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, analysisOpen, busy, onClose]);
+  }, [open, busy, onClose]);
 
   if (!open || !doc) return null;
 
@@ -609,15 +605,6 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
                   )}
                   Download
                 </PillButton>
-                <PillButton
-                  variant="secondary"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => setAnalysisOpen(true)}
-                >
-                  <Sparkles className="h-3.5 w-3.5 text-[var(--accent)]" />
-                  Analyze Document
-                </PillButton>
               </>
             )}
 
@@ -680,12 +667,6 @@ export const DocumentDetailsModal: React.FC<DocumentDetailsModalProps> = ({
           </div>
         </div>
       </div>
-
-      <DocumentAnalysisModal
-        open={analysisOpen}
-        doc={doc}
-        onClose={() => setAnalysisOpen(false)}
-      />
     </div>
   );
 };

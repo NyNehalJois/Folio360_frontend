@@ -62,7 +62,11 @@ export const RegisterPage: React.FC = () => {
       if (outcome.requiresVerification) {
         navigate(`/auth/verification-sent?email=${encodeURIComponent(outcome.user.email)}`, {
           replace: true,
-          state: { email: outcome.user.email },
+          state: {
+            email: outcome.user.email,
+            verificationEmailSent: outcome.verificationEmailSent,
+            deliveryMessage: outcome.message,
+          },
         });
       } else {
         navigate('/workspace', { replace: true });

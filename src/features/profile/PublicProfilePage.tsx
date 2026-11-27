@@ -8,6 +8,7 @@ import {
   Mail,
   MapPin,
   Phone,
+  Star,
 } from 'lucide-react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
@@ -17,8 +18,21 @@ import { PillButton } from '@/design/components/PillButton';
 import { ThemeToggle } from '@/design/components/ThemeToggle';
 import { UnderlineTabs, type UnderlineTabItem } from '@/design/components/UnderlineTabs';
 import { StrandCanvas } from '@/design/strands/StrandCanvas';
+import {
+  formatCredentialDate,
+  getAchievementCategoryLabel,
+  getCertificateCategoryLabel,
+  getVerificationStatusMeta,
+} from '@/features/certificates/certificateHelpers';
 import { formatEducationPeriod, getEducationLevelLabel } from '@/features/education/educationHelpers';
+import {
+  formatExperienceDateRange,
+  formatExperienceDuration,
+  formatExperienceLocation,
+  getExperienceTypeLabel,
+} from '@/features/experience/experienceHelpers';
 import { useApiQuery } from '@/hooks/useApiQuery';
+import { resolveProjectImageUrl } from '@/features/projects/projectHelpers';
 import { publicService } from '@/services/api';
 import { ApiClientError } from '@/services/http';
 
@@ -63,7 +77,13 @@ export const PublicProfilePage: React.FC = () => {
     if (profile.sections.education) items.push({ key: 'education', label: 'Education' });
     if (profile.sections.projects) items.push({ key: 'projects', label: 'Projects' });
     if (profile.sections.skills) items.push({ key: 'skills', label: 'Skills' });
-    if (profile.sections.certificates) items.push({ key: 'certificates', label: 'Certificates' });
+    if (
+      (profile.sections.certificates && profile.sections.certificates.length > 0) ||
+      (profile.sections.achievements && profile.sections.achievements.length > 0) ||
+      profile.sections.certificates
+    ) {
+      items.push({ key: 'certificates', label: 'Certificates' });
+    }
     if (profile.sections.experience) items.push({ key: 'experience', label: 'Experience' });
     return items;
   }, [profile]);
@@ -357,23 +377,76 @@ export const PublicProfilePage: React.FC = () => {
               )}
 
               {effectiveTab === 'projects' && (
-                <div className="divide-y divide-[var(--border-subtle)]">
-                  {(profile.sections.projects ?? []).map((proj, idx) => (
-                    <div key={idx} className="py-4">
-                      <p className="font-serif text-xl text-[var(--text-primary)]">{proj.title}</p>
-                      <p className="mt-1 text-sm text-[var(--text-secondary)]">{proj.summary}</p>
-                      <div className="mt-2.5 flex flex-wrap gap-1.5">
-                        {proj.technologies.map((tech) => (
-                          <span
-                            key={tech}
-                            className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-2.5 py-0.5 font-mono text-[11px] text-[var(--text-secondary)]"
-                          >
-                            {tech}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  {(profile.sections.projects ?? []).length === 0 ? (
+                    <p className="py-6 text-sm text-[var(--text-secondary)] sm:col-span-2">
+                      No public projects shared yet.
+                    </p>
+                  ) : (
+                    (profile.sections.projects ?? []).map((proj, idx) => (
+                      <article
+                        key={idx}
+                        className="flex flex-col overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)]"
+                      >
+                        {proj.images && proj.images[0] && (
+                          <div className="aspect-[16/10] w-full overflow-hidden border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)]">
+                            <img
+                              src={resolveProjectImageUrl(proj.images[0].url)}
+                              alt={proj.images[0].alt || proj.title}
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                        )}
+                        <div className="flex flex-1 flex-col p-5">
+                          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                            {proj.category}
+                          </p>
+                          <p className="mt-1 font-serif text-xl text-[var(--text-primary)]">
+                            {proj.title}
+                          </p>
+                          <p className="mt-1.5 text-sm text-[var(--text-secondary)]">
+                            {proj.summary}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {proj.technologies.map((tech) => (
+                              <span
+                                key={tech}
+                                className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-2.5 py-0.5 font-mono text-[11px] text-[var(--text-secondary)]"
+                              >
+                                {tech}
+                              </span>
+                            ))}
+                          </div>
+                          {(proj.live_url || proj.github_url) && (
+                            <div className="mt-auto flex items-center gap-4 pt-4 text-xs">
+                              {proj.live_url && (
+                                <a
+                                  href={proj.live_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 font-medium text-[var(--text-primary)] hover:text-[var(--accent)]"
+                                >
+                                  Live
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                              {proj.github_url && (
+                                <a
+                                  href={proj.github_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                >
+                                  GitHub
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    ))
+                  )}
                 </div>
               )}
 
@@ -391,36 +464,195 @@ export const PublicProfilePage: React.FC = () => {
               )}
 
               {effectiveTab === 'certificates' && (
-                <div className="divide-y divide-[var(--border-subtle)]">
-                  {(profile.sections.certificates ?? []).map((cert, idx) => (
-                    <div key={idx} className="py-4">
-                      <p className="font-serif text-xl text-[var(--text-primary)]">{cert.name}</p>
-                      <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                        {cert.issuer}
-                        {cert.issue_date ? ` · ${cert.issue_date}` : ''}
-                      </p>
-                    </div>
-                  ))}
+                <div className="space-y-8">
+                  {(profile.sections.certificates ?? []).length === 0 &&
+                  (profile.sections.achievements ?? []).length === 0 ? (
+                    <p className="py-6 text-sm text-[var(--text-secondary)]">
+                      No public certificates or achievements shared yet.
+                    </p>
+                  ) : (
+                    <>
+                      {(profile.sections.certificates ?? []).length > 0 && (
+                        <div>
+                          <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+                            CERTIFICATES
+                          </h2>
+                          <div className="mt-2 divide-y divide-[var(--border-subtle)]">
+                            {(profile.sections.certificates ?? []).map((cert, idx) => {
+                              const verifMeta = getVerificationStatusMeta(
+                                (cert.verification_status as 'self_reported' | 'link_provided' | 'issuer_verified') ??
+                                  'self_reported',
+                              );
+                              return (
+                                <div key={idx} className="py-4">
+                                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                    <p className="font-serif text-xl text-[var(--text-primary)]">
+                                      {cert.name}
+                                    </p>
+                                    <span className={`inline-flex rounded-full border px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] ${verifMeta.classes}`}>
+                                      {verifMeta.label}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                                    {[
+                                      cert.issuer,
+                                      cert.category ? getCertificateCategoryLabel(cert.category) : null,
+                                      formatCredentialDate(cert.issue_date),
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                  </p>
+                                  {cert.verification_url && (
+                                    <a
+                                      href={cert.verification_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:underline"
+                                    >
+                                      Verify credential
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {(profile.sections.achievements ?? []).length > 0 && (
+                        <div className="border-t border-[var(--border-subtle)] pt-6">
+                          <h2 className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+                            ACHIEVEMENTS &amp; DISTINCTIONS
+                          </h2>
+                          <div className="mt-2 divide-y divide-[var(--border-subtle)]">
+                            {(profile.sections.achievements ?? []).map((ach, idx) => (
+                              <div key={idx} className="py-4">
+                                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                  <p className="font-serif text-xl text-[var(--text-primary)]">
+                                    {ach.title}
+                                  </p>
+                                  <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-2.5 py-0.5 font-mono text-[10px] text-[var(--text-secondary)]">
+                                    {getAchievementCategoryLabel(ach.category)}
+                                  </span>
+                                </div>
+                                {(ach.organization || ach.date) && (
+                                  <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                                    {[ach.organization, formatCredentialDate(ach.date)]
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                  </p>
+                                )}
+                                {ach.description && (
+                                  <p className="mt-2 whitespace-pre-line text-sm text-[var(--text-secondary)]">
+                                    {ach.description}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
 
               {effectiveTab === 'experience' && (
                 <div className="divide-y divide-[var(--border-subtle)]">
-                  {(profile.sections.experience ?? []).map((exp, idx) => (
-                    <div key={idx} className="py-4">
-                      <p className="font-serif text-xl text-[var(--text-primary)]">
-                        {exp.role} — {exp.organization}
-                      </p>
-                      <p className="mt-1 font-mono text-[11px] text-[var(--text-secondary)]">
-                        {exp.start_date} – {exp.is_current ? 'Present' : exp.end_date ?? ''}
-                      </p>
-                      {exp.description && (
-                        <p className="mt-2 text-sm text-[var(--text-secondary)]">
-                          {exp.description}
+                  {(profile.sections.experience ?? []).map((exp, idx) => {
+                    const dateRange = formatExperienceDateRange(
+                      exp.start_date,
+                      exp.end_date,
+                      exp.is_current,
+                    );
+                    const duration = formatExperienceDuration(
+                      exp.start_date,
+                      exp.end_date,
+                      exp.is_current,
+                    );
+                    const locationLabel = formatExperienceLocation({
+                      location: exp.location ?? null,
+                      is_remote: Boolean(exp.is_remote),
+                    });
+
+                    return (
+                      <div key={idx} className="py-5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full border border-[var(--border-subtle)] px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                            {getExperienceTypeLabel(exp.type)}
+                          </span>
+                          {exp.is_current && (
+                            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-emerald-700 dark:text-emerald-300">
+                              Current
+                            </span>
+                          )}
+                          {exp.featured && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-amber-600 dark:text-amber-300">
+                              <Star className="h-3 w-3 fill-current" /> Featured
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="mt-2 font-serif text-xl text-[var(--text-primary)]">
+                          {exp.role} —{' '}
+                          {exp.organization_url ? (
+                            <a
+                              href={exp.organization_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 hover:text-[var(--accent)] hover:underline"
+                            >
+                              {exp.organization}
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          ) : (
+                            exp.organization
+                          )}
                         </p>
-                      )}
-                    </div>
-                  ))}
+
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-[var(--text-secondary)]">
+                          <span>
+                            {dateRange}
+                            {duration ? ` · ${duration}` : ''}
+                          </span>
+                          {locationLabel && (
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              {locationLabel}
+                            </span>
+                          )}
+                        </div>
+
+                        {exp.description && (
+                          <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-[var(--text-secondary)]">
+                            {exp.description}
+                          </p>
+                        )}
+
+                        {exp.highlights && exp.highlights.length > 0 && (
+                          <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-[var(--text-primary)]">
+                            {exp.highlights.map((hl, hlIdx) => (
+                              <li key={hlIdx}>{hl}</li>
+                            ))}
+                          </ul>
+                        )}
+
+                        {exp.skills && exp.skills.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {exp.skills.map((skillName) => (
+                              <span
+                                key={skillName}
+                                className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-main)] px-2.5 py-0.5 text-xs text-[var(--text-secondary)]"
+                              >
+                                {skillName}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

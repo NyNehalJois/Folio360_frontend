@@ -15,20 +15,20 @@ import {
 } from '@/features/auth/VerifyEmailPages';
 import { DocumentVaultPage } from '@/features/documents/DocumentVaultPage';
 import { EducationPage } from '@/features/education/EducationPage';
+import { ExperiencePage } from '@/features/experience/ExperiencePage';
 import { HomePage } from '@/features/home/HomePage';
 import { OverviewPage } from '@/features/overview/OverviewPage';
 import { ProfileCreationPage } from '@/features/profile/ProfileCreationPage';
 import { ProfilePage } from '@/features/profile/ProfilePage';
 import { PublicProfilePage } from '@/features/profile/PublicProfilePage';
+import { ProjectsPage } from '@/features/projects/ProjectsPage';
+import { CertificatesPage } from '@/features/certificates/CertificatesPage';
+import { SkillsPage } from '@/features/skills/SkillsPage';
 import { ModuleScaffoldPage } from '@/features/workspace/ModuleScaffoldPage';
 import { WorkspaceLayout } from '@/layouts/WorkspaceLayout';
 import {
-  certificatesService,
-  experienceService,
-  projectsService,
   resumesService,
   sharingService,
-  skillsService,
 } from '@/services/api';
 
 export const App: React.FC = () => {
@@ -41,12 +41,15 @@ export const App: React.FC = () => {
             <Route path="/auth/login" element={<LoginPage />} />
             <Route path="/auth/register" element={<RegisterPage />} />
             <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/verify-email" element={<VerifyEmailPage />} />
             <Route path="/auth/verification-sent" element={<VerificationSentPage />} />
             <Route path="/auth/verification-success" element={<VerificationSuccessPage />} />
             <Route path="/auth/verification-failed" element={<VerificationFailedPage />} />
             <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/auth/callback" element={<OAuthCallbackPage />} />
+            <Route path="/auth/oauth/callback" element={<OAuthCallbackPage />} />
             <Route
               path="/onboarding/profile"
               element={
@@ -71,72 +74,10 @@ export const App: React.FC = () => {
               <Route index element={<OverviewPage />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route path="education" element={<EducationPage />} />
-              <Route
-                path="projects"
-                element={
-                  <ModuleScaffoldPage
-                    sectionCode="MODULE 05 & 06 — PROJECTS & GITHUB"
-                    title="Projects Portfolio"
-                    description="Curate projects, screenshots, reports, and authorized GitHub repository imports."
-                    contractEndpoints={[
-                      'GET /api/v1/projects',
-                      'POST /api/v1/projects',
-                      'GET /api/v1/github/repositories',
-                      'POST /api/v1/github/repositories/import',
-                    ]}
-                    loadCount={async () => (await projectsService.list()).total}
-                  />
-                }
-              />
-              <Route
-                path="skills"
-                element={
-                  <ModuleScaffoldPage
-                    sectionCode="MODULE 07 — SKILLS"
-                    title="Skills Management"
-                    description="Organize technical and soft skills linked to your projects, certificates, and roles."
-                    contractEndpoints={[
-                      'GET /api/v1/skills/catalog',
-                      'GET /api/v1/skills/me',
-                      'POST /api/v1/skills/me',
-                      'POST /api/v1/skills/suggestions',
-                    ]}
-                    loadCount={async () => (await skillsService.listMine()).total}
-                  />
-                }
-              />
-              <Route
-                path="certificates"
-                element={
-                  <ModuleScaffoldPage
-                    sectionCode="MODULE 08 — CERTIFICATES"
-                    title="Certificates & Achievements"
-                    description="Track credentials, verification URLs, and self-reported vs. link-provided statuses."
-                    contractEndpoints={[
-                      'GET /api/v1/certificates',
-                      'POST /api/v1/certificates',
-                      'GET /api/v1/achievements',
-                    ]}
-                    loadCount={async () => (await certificatesService.list()).total}
-                  />
-                }
-              />
-              <Route
-                path="experience"
-                element={
-                  <ModuleScaffoldPage
-                    sectionCode="MODULE 09 — EXPERIENCE"
-                    title="Experience Timeline"
-                    description="Document internships, employment, volunteering, mentorship, and leadership."
-                    contractEndpoints={[
-                      'GET /api/v1/experience',
-                      'POST /api/v1/experience',
-                      'PATCH /api/v1/experience/{id}',
-                    ]}
-                    loadCount={async () => (await experienceService.list()).total}
-                  />
-                }
-              />
+              <Route path="projects" element={<ProjectsPage />} />
+              <Route path="skills" element={<SkillsPage />} />
+              <Route path="certificates" element={<CertificatesPage />} />
+              <Route path="experience" element={<ExperiencePage />} />
               <Route path="documents" element={<DocumentVaultPage />} />
               <Route
                 path="resumes"

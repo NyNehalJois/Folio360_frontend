@@ -53,8 +53,14 @@ export async function prepareOAuthStartUrl(
     // Ignore storage unavailability
   }
 
+  const callbackUri =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/auth/oauth/callback`
+      : undefined;
+
   return authService.getOAuthStartUrl(provider, {
     redirectTo,
+    redirectUri: callbackUri,
     state,
     codeChallenge,
     codeChallengeMethod: 'S256',
