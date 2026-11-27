@@ -124,7 +124,7 @@ export function toInitialFormValues(record?: Education | null): EducationFormVal
       end_year: '',
       is_current: false,
       description: '',
-      visibility: 'public',
+      visibility: 'private',
     };
   }
 

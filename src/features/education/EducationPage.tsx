@@ -62,7 +62,6 @@ export const EducationPage: React.FC = () => {
   );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<ApiClientError | Error | null>(null);
-  const [docsLoading, setDocsLoading] = useState(false);
   const [docsError, setDocsError] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -110,7 +109,6 @@ export const EducationPage: React.FC = () => {
   } | null>(null);
 
   const loadDocumentsOnly = useCallback(async () => {
-    setDocsLoading(true);
     setDocsError(null);
     try {
       const docsRes = await documentsService.list({ page: 1, page_size: 100 });
@@ -119,8 +117,6 @@ export const EducationPage: React.FC = () => {
       setDocsError(
         err instanceof Error ? err.message : 'Unable to load documents from your vault.',
       );
-    } finally {
-      setDocsLoading(false);
     }
   }, []);
 
@@ -1219,13 +1215,6 @@ export const EducationPage: React.FC = () => {
       <EducationFormModal
         open={modalOpen}
         editingRecord={editingRecord}
-        availableDocuments={documents}
-        documentsLoading={docsLoading}
-        documentsError={docsError}
-        onRetryDocuments={() => void loadDocumentsOnly()}
-        onDocumentUploaded={(doc) => {
-          setDocuments((prev) => [doc, ...prev]);
-        }}
         onClose={() => {
           if (!modalOpen) return;
           setModalOpen(false);

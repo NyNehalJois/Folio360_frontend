@@ -1,24 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import {
-  AlertCircle,
-  Check,
-  FileText,
-  Globe,
-  Loader2,
-  Lock,
-  RefreshCw,
-  X,
-} from 'lucide-react';
+import { AlertCircle, Check, Globe, Lock, X } from 'lucide-react';
 import { PillButton } from '@/design/components/PillButton';
-import { isDocumentReady } from '@/features/documents/DocumentStatusBadge';
-import {
-  DocumentUploadWidget,
-  formatDocumentCategory,
-  formatFileSize,
-} from '@/features/documents/DocumentUploadWidget';
 import { educationService } from '@/services/api/education.service';
-import { ApiClientError } from '@/services/http';
-import type { Document, Education, EducationCreate, EducationLevel, Visibility } from '@/types/api';
+import type { Education, EducationCreate, EducationLevel, Visibility } from '@/types/api';
 import {
   EDUCATION_LEVEL_OPTIONS,
   MONTH_OPTIONS,
@@ -31,37 +15,113 @@ import {
 interface EducationFormModalProps {
   open: boolean;
   editingRecord: Education | null;
-  availableDocuments: Document[];
-  documentsLoading?: boolean;
-  documentsError?: string | null;
-  onRetryDocuments?: () => void;
-  onDocumentUploaded: (doc: Document) => void;
   onClose: () => void;
   onSaved: (record: Education, mode: 'create' | 'edit') => void | Promise<void>;
 }
 
 const INPUT_BASE_CLASS =
+  'h-10 w-full rounded-md border bg-[var(--bg-main)] px-3.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 disabled:cursor-not-allowed disabled:opacity-50';
+
+const TEXTAREA_BASE_CLASS =
   'w-full rounded-md border bg-[var(--bg-main)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 disabled:cursor-not-allowed disabled:opacity-50';
 
 const LABEL_CLASS =
   'block font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-secondary)] mb-1.5';
 
+const SECTION_HEADING_CLASS =
+  'font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-secondary)]';
+
+function fieldBorder(hasError?: string): string {
+  return hasError
+    ? 'border-[var(--danger-border)]'
+    : 'border-[var(--border-medium)] focus:border-[var(--text-primary)]';
+}
+
+function buildUpdatePayload(
+  editingRecord: Education,
+  values: EducationFormValues,
+): Partial<EducationCreate> {
+  const nextInstitution = values.institution.trim();
+  const nextUniversity = values.university_or_board.trim() || null;
+  const nextLevel = values.education_level;
+  const nextDegree = values.degree.trim();
+  const nextBranch = values.branch.trim();
+  const nextSpecialization = values.specialization.trim() || null;
+  const nextCountry = values.country.trim();
+  const nextState = values.state.trim();
+  const nextStartMonth = Number(values.start_month);
+  const nextStartYear = Number(values.start_year);
+  const nextEndMonth = values.is_current ? null : Number(values.end_month);
+  const nextEndYear = values.is_current ? null : Number(values.end_year);
+  const nextIsCurrent = values.is_current;
+  const nextDescription = values.description.trim() || null;
+  const nextVisibility = values.visibility;
+
+  const patchPayload: Partial<EducationCreate> = {};
+  if (nextInstitution !== editingRecord.institution) patchPayload.institution = nextInstitution;
+  if (nextUniversity !== (editingRecord.university_or_board ?? null)) {
+    patchPayload.university_or_board = nextUniversity;
+  }
+  if (nextLevel !== (editingRecord.education_level ?? 'undergraduate')) {
+    patchPayload.education_level = nextLevel;
+  }
+  if (nextDegree !== editingRecord.degree) patchPayload.degree = nextDegree;
+  if (nextBranch !== (editingRecord.branch ?? '')) patchPayload.branch = nextBranch;
+  if (nextSpecialization !== (editingRecord.specialization ?? null)) {
+    patchPayload.specialization = nextSpecialization;
+  }
+  if (nextCountry !== (editingRecord.country ?? '')) patchPayload.country = nextCountry;
+  if (nextState !== (editingRecord.state ?? '')) patchPayload.state = nextState;
+  if (nextStartMonth !== (editingRecord.start_month ?? null)) {
+    patchPayload.start_month = nextStartMonth;
+  }
+  if (nextStartYear !== (editingRecord.start_year ?? null)) {
+    patchPayload.start_year = nextStartYear;
+  }
+  if (nextIsCurrent !== editingRecord.is_current) patchPayload.is_current = nextIsCurrent;
+  if (nextEndMonth !== (editingRecord.end_month ?? null)) patchPayload.end_month = nextEndMonth;
+  if (nextEndYear !== (editingRecord.end_year ?? null)) patchPayload.end_year = nextEndYear;
+  if (nextDescription !== (editingRecord.description ?? null)) {
+    patchPayload.description = nextDescription;
+  }
+  if (nextVisibility !== editingRecord.visibility) patchPayload.visibility = nextVisibility;
+
+  return patchPayload;
+}
+
+function buildCreatePayload(values: EducationFormValues): EducationCreate {
+  return {
+    institution: values.institution.trim(),
+    university_or_board: values.university_or_board.trim() || null,
+    education_level: values.education_level,
+    degree: values.degree.trim(),
+    branch: values.branch.trim(),
+    specialization: values.specialization.trim() || null,
+    country: values.country.trim(),
+    state: values.state.trim(),
+    start_month: Number(values.start_month),
+    start_year: Number(values.start_year),
+    end_month: values.is_current ? null : Number(values.end_month),
+    end_year: values.is_current ? null : Number(values.end_year),
+    is_current: values.is_current,
+    description: values.description.trim() || null,
+    visibility: values.visibility,
+    result_type: null,
+    result_value: null,
+    show_result_publicly: true,
+    achievements: [],
+  };
+}
+
+/** Modal form for creating or editing a single academic timeline entry. */
 export const EducationFormModal: React.FC<EducationFormModalProps> = ({
   open,
   editingRecord,
-  availableDocuments,
-  documentsLoading = false,
-  documentsError = null,
-  onRetryDocuments,
-  onDocumentUploaded,
   onClose,
   onSaved,
 }) => {
   const [values, setValues] = useState<EducationFormValues>(() =>
     toInitialFormValues(editingRecord),
-  );
-  const [selectedDocIds, setSelectedDocIds] = useState<string[]>(
-    () => editingRecord?.documents?.map((doc) => doc.id) ?? [],
   );
   const [errors, setErrors] = useState<EducationFormErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -70,7 +130,6 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
   useEffect(() => {
     if (!open) return;
     setValues(toInitialFormValues(editingRecord));
-    setSelectedDocIds(editingRecord?.documents?.map((doc) => doc.id) ?? []);
     setErrors({});
     setSubmitError(null);
     setSaving(false);
@@ -142,65 +201,13 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
       return;
     }
 
-    const nextInstitution = values.institution.trim();
-    const nextUniversity = values.university_or_board.trim() || null;
-    const nextLevel = values.education_level;
-    const nextDegree = values.degree.trim();
-    const nextBranch = values.branch.trim();
-    const nextSpecialization = values.specialization.trim() || null;
-    const nextCountry = values.country.trim();
-    const nextState = values.state.trim();
-    const nextStartMonth = Number(values.start_month);
-    const nextStartYear = Number(values.start_year);
-    const nextEndMonth = values.is_current ? null : Number(values.end_month);
-    const nextEndYear = values.is_current ? null : Number(values.end_year);
-    const nextIsCurrent = values.is_current;
-    const nextDescription = values.description.trim() || null;
-    const nextVisibility = values.visibility;
-
     setSaving(true);
     setSubmitError(null);
 
     try {
       let saved: Education;
       if (isEdit && editingRecord) {
-        const patchPayload: Partial<EducationCreate> = {};
-        if (nextInstitution !== editingRecord.institution) patchPayload.institution = nextInstitution;
-        if (nextUniversity !== (editingRecord.university_or_board ?? null)) {
-          patchPayload.university_or_board = nextUniversity;
-        }
-        if (nextLevel !== (editingRecord.education_level ?? 'undergraduate')) {
-          patchPayload.education_level = nextLevel;
-        }
-        if (nextDegree !== editingRecord.degree) patchPayload.degree = nextDegree;
-        if (nextBranch !== (editingRecord.branch ?? '')) patchPayload.branch = nextBranch;
-        if (nextSpecialization !== (editingRecord.specialization ?? null)) {
-          patchPayload.specialization = nextSpecialization;
-        }
-        if (nextCountry !== (editingRecord.country ?? '')) patchPayload.country = nextCountry;
-        if (nextState !== (editingRecord.state ?? '')) patchPayload.state = nextState;
-        if (nextStartMonth !== (editingRecord.start_month ?? null)) {
-          patchPayload.start_month = nextStartMonth;
-        }
-        if (nextStartYear !== (editingRecord.start_year ?? null)) {
-          patchPayload.start_year = nextStartYear;
-        }
-        if (nextIsCurrent !== editingRecord.is_current) patchPayload.is_current = nextIsCurrent;
-        if (nextEndMonth !== (editingRecord.end_month ?? null)) patchPayload.end_month = nextEndMonth;
-        if (nextEndYear !== (editingRecord.end_year ?? null)) patchPayload.end_year = nextEndYear;
-        if (nextDescription !== (editingRecord.description ?? null)) {
-          patchPayload.description = nextDescription;
-        }
-        if (nextVisibility !== editingRecord.visibility) patchPayload.visibility = nextVisibility;
-
-        const prevDocIds = editingRecord.documents?.map((doc) => doc.id) ?? [];
-        const docsChanged =
-          selectedDocIds.length !== prevDocIds.length ||
-          selectedDocIds.some((id, idx) => id !== prevDocIds[idx]);
-        if (docsChanged) {
-          patchPayload.document_ids = selectedDocIds;
-        }
-
+        const patchPayload = buildUpdatePayload(editingRecord, values);
         if (Object.keys(patchPayload).length === 0) {
           setSaving(false);
           onClose();
@@ -208,38 +215,10 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
         }
         saved = await educationService.update(editingRecord.id, patchPayload);
       } else {
-        const payload: EducationCreate = {
-          institution: nextInstitution,
-          university_or_board: nextUniversity,
-          education_level: nextLevel,
-          degree: nextDegree,
-          branch: nextBranch,
-          specialization: nextSpecialization,
-          country: nextCountry,
-          state: nextState,
-          start_month: nextStartMonth,
-          start_year: nextStartYear,
-          end_month: nextEndMonth,
-          end_year: nextEndYear,
-          is_current: nextIsCurrent,
-          description: nextDescription,
-          visibility: nextVisibility,
-          result_type: null,
-          result_value: null,
-          show_result_publicly: true,
-          achievements: [],
-          document_ids: selectedDocIds,
-        };
-        saved = await educationService.create(payload);
+        saved = await educationService.create(buildCreatePayload(values));
       }
       await onSaved(saved, isEdit ? 'edit' : 'create');
     } catch (err) {
-      if (
-        err instanceof ApiClientError &&
-        (err.code === 'DOCUMENT_NOT_READY' || err.code === 'INVALID_REFERENCE')
-      ) {
-        onRetryDocuments?.();
-      }
       setSubmitError(
         err instanceof Error
           ? err.message
@@ -249,18 +228,6 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
       setSaving(false);
     }
   };
-
-  const selectableDocuments = availableDocuments.filter((doc) => isDocumentReady(doc));
-  const nonReadyCount = availableDocuments.length - selectableDocuments.length;
-  const selectableIds = new Set(selectableDocuments.map((doc) => doc.id));
-  const existingMissingRefs = (editingRecord?.documents ?? []).filter(
-    (ref) => selectedDocIds.includes(ref.id) && !selectableIds.has(ref.id),
-  );
-
-  const fieldBorder = (hasError?: string) =>
-    hasError
-      ? 'border-[var(--danger-border)]'
-      : 'border-[var(--border-medium)] focus:border-[var(--text-primary)]';
 
   return (
     <div
@@ -276,18 +243,18 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="education-modal-title"
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--border-medium)] bg-[var(--bg-main)] shadow-2xl"
+        className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--border-medium)] bg-[var(--surface-elevated)] shadow-2xl"
       >
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] px-6 py-5">
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] px-6 py-4">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+            <p className={SECTION_HEADING_CLASS}>
               {isEdit ? 'Edit Academic Entry' : 'New Academic Entry'}
             </p>
             <h2
               id="education-modal-title"
               className="mt-1 font-serif text-2xl text-[var(--text-primary)]"
             >
-              {isEdit ? 'Update education record' : 'Add education record'}
+              {isEdit ? 'Edit education' : 'Add education'}
             </h2>
           </div>
           <button
@@ -313,171 +280,184 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="edu-level" className={LABEL_CLASS}>
-                  Education Level <span className="text-[var(--danger-text)]">*</span>
-                </label>
-                <select
-                  id="edu-level"
-                  value={values.education_level}
-                  onChange={(e) =>
-                    updateField('education_level', e.target.value as EducationLevel)
-                  }
-                  aria-invalid={Boolean(errors.education_level)}
-                  className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.education_level)}`}
-                >
-                  {EDUCATION_LEVEL_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                {errors.education_level && (
-                  <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.education_level}</p>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="edu-degree" className={LABEL_CLASS}>
-                  Degree / Qualification <span className="text-[var(--danger-text)]">*</span>
-                </label>
-                <input
-                  id="edu-degree"
-                  type="text"
-                  value={values.degree}
-                  onChange={(e) => updateField('degree', e.target.value)}
-                  placeholder="e.g., B.E., Class XII, Diploma"
-                  aria-invalid={Boolean(errors.degree)}
-                  className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.degree)}`}
-                />
-                {errors.degree && (
-                  <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.degree}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="edu-institution" className={LABEL_CLASS}>
-                  Institution / College Name <span className="text-[var(--danger-text)]">*</span>
-                </label>
-                <input
-                  id="edu-institution"
-                  type="text"
-                  value={values.institution}
-                  onChange={(e) => updateField('institution', e.target.value)}
-                  placeholder="e.g., R.V. College of Engineering"
-                  aria-invalid={Boolean(errors.institution)}
-                  className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.institution)}`}
-                />
-                {errors.institution && (
-                  <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.institution}</p>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="edu-university" className={LABEL_CLASS}>
-                  University / Education Board
-                </label>
-                <input
-                  id="edu-university"
-                  type="text"
-                  value={values.university_or_board}
-                  onChange={(e) => updateField('university_or_board', e.target.value)}
-                  placeholder="e.g., Visvesvaraya Technological University"
-                  aria-invalid={Boolean(errors.university_or_board)}
-                  className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.university_or_board)}`}
-                />
-                <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
-                  Keep affiliating university or board separate from the college or school name.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="edu-branch" className={LABEL_CLASS}>
-                  Field of Study <span className="text-[var(--danger-text)]">*</span>
-                </label>
-                <input
-                  id="edu-branch"
-                  type="text"
-                  value={values.branch}
-                  onChange={(e) => updateField('branch', e.target.value)}
-                  placeholder="e.g., Computer Science & Engineering"
-                  aria-invalid={Boolean(errors.branch)}
-                  className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.branch)}`}
-                />
-                {errors.branch && (
-                  <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.branch}</p>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="edu-specialization" className={LABEL_CLASS}>
-                  Specialization <span className="opacity-70">(Optional)</span>
-                </label>
-                <input
-                  id="edu-specialization"
-                  type="text"
-                  value={values.specialization}
-                  onChange={(e) => updateField('specialization', e.target.value)}
-                  placeholder="e.g., Artificial Intelligence & Systems"
-                  className={`${INPUT_BASE_CLASS} ${fieldBorder()}`}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="edu-country" className={LABEL_CLASS}>
-                  Country <span className="text-[var(--danger-text)]">*</span>
-                </label>
-                <input
-                  id="edu-country"
-                  type="text"
-                  value={values.country}
-                  onChange={(e) => updateField('country', e.target.value)}
-                  placeholder="e.g., India"
-                  aria-invalid={Boolean(errors.country)}
-                  className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.country)}`}
-                />
-                {errors.country && (
-                  <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.country}</p>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="edu-state" className={LABEL_CLASS}>
-                  State / Region <span className="text-[var(--danger-text)]">*</span>
-                </label>
-                <input
-                  id="edu-state"
-                  type="text"
-                  value={values.state}
-                  onChange={(e) => updateField('state', e.target.value)}
-                  placeholder="e.g., Karnataka"
-                  aria-invalid={Boolean(errors.state)}
-                  className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.state)}`}
-                />
-                {errors.state && (
-                  <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.state}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/45 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Academic Details */}
+            <section aria-labelledby="edu-section-details">
+              <h3 id="edu-section-details" className={`${SECTION_HEADING_CLASS} mb-3`}>
+                Academic Details
+              </h3>
+              <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
                 <div>
-                  <p className="text-sm font-medium text-[var(--text-primary)]">
-                    Currently studying here
-                  </p>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    Marks this qualification as in progress and clears the end date.
-                  </p>
+                  <label htmlFor="edu-level" className={LABEL_CLASS}>
+                    Education Level <span className="text-[var(--danger-text)]">*</span>
+                  </label>
+                  <select
+                    id="edu-level"
+                    value={values.education_level}
+                    onChange={(e) =>
+                      updateField('education_level', e.target.value as EducationLevel)
+                    }
+                    aria-invalid={Boolean(errors.education_level)}
+                    className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.education_level)}`}
+                  >
+                    {EDUCATION_LEVEL_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.education_level && (
+                    <p className="mt-1 text-xs text-[var(--danger-text)]">
+                      {errors.education_level}
+                    </p>
+                  )}
                 </div>
-                <label className="inline-flex cursor-pointer items-center gap-2.5">
+
+                <div>
+                  <label htmlFor="edu-degree" className={LABEL_CLASS}>
+                    Degree / Qualification <span className="text-[var(--danger-text)]">*</span>
+                  </label>
+                  <input
+                    id="edu-degree"
+                    type="text"
+                    value={values.degree}
+                    onChange={(e) => updateField('degree', e.target.value)}
+                    placeholder="e.g., B.E., Class XII, Diploma"
+                    aria-invalid={Boolean(errors.degree)}
+                    className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.degree)}`}
+                  />
+                  {errors.degree && (
+                    <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.degree}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="edu-institution" className={LABEL_CLASS}>
+                    Institution / College <span className="text-[var(--danger-text)]">*</span>
+                  </label>
+                  <input
+                    id="edu-institution"
+                    type="text"
+                    value={values.institution}
+                    onChange={(e) => updateField('institution', e.target.value)}
+                    placeholder="e.g., R.V. College of Engineering"
+                    aria-invalid={Boolean(errors.institution)}
+                    className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.institution)}`}
+                  />
+                  {errors.institution && (
+                    <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.institution}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="edu-university" className={LABEL_CLASS}>
+                    University / Education Board{' '}
+                    <span className="opacity-70">(Optional)</span>
+                  </label>
+                  <input
+                    id="edu-university"
+                    type="text"
+                    value={values.university_or_board}
+                    onChange={(e) => updateField('university_or_board', e.target.value)}
+                    placeholder="e.g., VTU, CBSE (if different)"
+                    aria-invalid={Boolean(errors.university_or_board)}
+                    className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.university_or_board)}`}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="edu-branch" className={LABEL_CLASS}>
+                    Field of Study <span className="text-[var(--danger-text)]">*</span>
+                  </label>
+                  <input
+                    id="edu-branch"
+                    type="text"
+                    value={values.branch}
+                    onChange={(e) => updateField('branch', e.target.value)}
+                    placeholder="e.g., Computer Science & Engineering"
+                    aria-invalid={Boolean(errors.branch)}
+                    className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.branch)}`}
+                  />
+                  {errors.branch && (
+                    <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.branch}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="edu-specialization" className={LABEL_CLASS}>
+                    Specialization <span className="opacity-70">(Optional)</span>
+                  </label>
+                  <input
+                    id="edu-specialization"
+                    type="text"
+                    value={values.specialization}
+                    onChange={(e) => updateField('specialization', e.target.value)}
+                    placeholder="e.g., Artificial Intelligence & Systems"
+                    className={`${INPUT_BASE_CLASS} ${fieldBorder()}`}
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Location */}
+            <section
+              aria-labelledby="edu-section-location"
+              className="border-t border-[var(--border-subtle)] pt-5"
+            >
+              <h3 id="edu-section-location" className={`${SECTION_HEADING_CLASS} mb-3`}>
+                Location
+              </h3>
+              <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="edu-country" className={LABEL_CLASS}>
+                    Country <span className="text-[var(--danger-text)]">*</span>
+                  </label>
+                  <input
+                    id="edu-country"
+                    type="text"
+                    value={values.country}
+                    onChange={(e) => updateField('country', e.target.value)}
+                    placeholder="e.g., India"
+                    aria-invalid={Boolean(errors.country)}
+                    className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.country)}`}
+                  />
+                  {errors.country && (
+                    <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.country}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="edu-state" className={LABEL_CLASS}>
+                    State / Region <span className="text-[var(--danger-text)]">*</span>
+                  </label>
+                  <input
+                    id="edu-state"
+                    type="text"
+                    value={values.state}
+                    onChange={(e) => updateField('state', e.target.value)}
+                    placeholder="e.g., Karnataka"
+                    aria-invalid={Boolean(errors.state)}
+                    className={`${INPUT_BASE_CLASS} ${fieldBorder(errors.state)}`}
+                  />
+                  {errors.state && (
+                    <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.state}</p>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {/* Academic Timeline */}
+            <section
+              aria-labelledby="edu-section-timeline"
+              className="border-t border-[var(--border-subtle)] pt-5"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 id="edu-section-timeline" className={SECTION_HEADING_CLASS}>
+                  Academic Timeline
+                </h3>
+                <label
+                  htmlFor="edu-is-current"
+                  className="inline-flex cursor-pointer items-center gap-2 text-xs text-[var(--text-primary)]"
+                >
                   <input
                     id="edu-is-current"
                     type="checkbox"
@@ -485,18 +465,16 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
                     onChange={(e) => handleCurrentToggle(e.target.checked)}
                     className="h-4 w-4 rounded border-[var(--border-medium)] accent-[var(--accent)]"
                   />
-                  <span className="font-mono text-xs text-[var(--text-primary)]">
-                    {values.is_current ? 'Ongoing' : 'Completed'}
-                  </span>
+                  <span>Currently studying here</span>
                 </label>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
                 <div>
                   <span className={LABEL_CLASS}>
                     Start Date <span className="text-[var(--danger-text)]">*</span>
                   </span>
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-[1.35fr_1fr] gap-2.5">
                     <div>
                       <select
                         id="edu-start-month"
@@ -548,10 +526,10 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
                     {!values.is_current ? (
                       <span className="text-[var(--danger-text)]">*</span>
                     ) : (
-                      <span className="opacity-70">(Cleared while ongoing)</span>
+                      <span className="opacity-70">(Present)</span>
                     )}
                   </span>
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-[1.35fr_1fr] gap-2.5">
                     <div>
                       <select
                         id="edu-end-month"
@@ -605,12 +583,19 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
                   <span>{errors.date_range}</span>
                 </p>
               )}
-            </div>
+            </section>
 
-            <div>
+            {/* Academic Highlights */}
+            <section
+              aria-labelledby="edu-section-highlights"
+              className="border-t border-[var(--border-subtle)] pt-5"
+            >
+              <h3 id="edu-section-highlights" className={`${SECTION_HEADING_CLASS} mb-3`}>
+                Academic Highlights
+              </h3>
               <div className="flex items-center justify-between">
                 <label htmlFor="edu-description" className={LABEL_CLASS}>
-                  Description / Academic Highlights <span className="opacity-70">(Optional)</span>
+                  Description <span className="opacity-70">(Optional)</span>
                 </label>
                 <span className="font-mono text-[10px] text-[var(--text-secondary)]">
                   {values.description.length}/1500
@@ -623,165 +608,38 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
                 onChange={(e) => updateField('description', e.target.value)}
                 placeholder="Relevant coursework, honors, thesis focus, or academic societies."
                 aria-invalid={Boolean(errors.description)}
-                className={`${INPUT_BASE_CLASS} resize-y ${fieldBorder(errors.description)}`}
+                className={`${TEXTAREA_BASE_CLASS} resize-y ${fieldBorder(errors.description)}`}
               />
               {errors.description && (
                 <p className="mt-1 text-xs text-[var(--danger-text)]">{errors.description}</p>
               )}
-            </div>
+            </section>
 
-            {/* Attach or Upload Ready Academic Documents */}
-            <div className="space-y-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/35 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-medium text-[var(--text-primary)]">
-                    Academic Documents
-                  </p>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    Attach validated documents from your private Document Vault or upload a new file. Linked documents stay private to your workspace.
-                  </p>
-                </div>
-                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--text-secondary)] shrink-0">
-                  {selectedDocIds.length} attached
-                </span>
-              </div>
-
-              {documentsLoading ? (
-                <div className="flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-main)] px-3 py-2.5 text-xs text-[var(--text-secondary)]">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>Loading your Document Vault…</span>
-                </div>
-              ) : documentsError ? (
-                <div
-                  role="alert"
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)] px-3 py-2.5 text-xs text-[var(--danger-text)]"
-                >
-                  <span>{documentsError}</span>
-                  {onRetryDocuments && (
-                    <PillButton
-                      variant="secondary"
-                      size="sm"
-                      onClick={onRetryDocuments}
-                    >
-                      <RefreshCw className="h-3 w-3" />
-                      Retry
-                    </PillButton>
-                  )}
-                </div>
-              ) : selectableDocuments.length === 0 && existingMissingRefs.length === 0 ? (
-                <div className="rounded-md border border-dashed border-[var(--border-medium)] bg-[var(--bg-main)]/60 px-3.5 py-3 text-xs text-[var(--text-secondary)]">
-                  No Ready documents available yet. Only scanned and verified documents (`ready`) can be attached.
-                </div>
-              ) : (
-                <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
-                  {existingMissingRefs.map((ref) => (
-                    <label
-                      key={ref.id}
-                      className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)]/50 px-3 py-2 text-xs"
-                    >
-                      <span className="flex min-w-0 items-center gap-2.5">
-                        <input
-                          type="checkbox"
-                          checked={selectedDocIds.includes(ref.id)}
-                          onChange={() =>
-                            setSelectedDocIds((prev) =>
-                              prev.filter((id) => id !== ref.id),
-                            )
-                          }
-                          className="h-3.5 w-3.5 rounded border-[var(--border-medium)] accent-[var(--accent)]"
-                        />
-                        <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--danger-text)]" />
-                        <span className="truncate font-medium text-[var(--text-primary)]">
-                          {ref.title}
-                        </span>
-                      </span>
-                      <span className="shrink-0 font-mono text-[10px] text-[var(--danger-text)]">
-                        Unavailable · Uncheck to unlink
-                      </span>
-                    </label>
-                  ))}
-
-                  {selectableDocuments.map((doc) => {
-                    const checked = selectedDocIds.includes(doc.id);
-                    return (
-                      <label
-                        key={doc.id}
-                        className={`flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs transition-colors ${
-                          checked
-                            ? 'border-[var(--border-accent)] bg-[var(--surface-elevated)]'
-                            : 'border-[var(--border-subtle)] bg-[var(--bg-main)] hover:border-[var(--border-medium)]'
-                        }`}
-                      >
-                        <span className="flex min-w-0 items-center gap-2.5">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() =>
-                              setSelectedDocIds((prev) =>
-                                prev.includes(doc.id)
-                                  ? prev.filter((id) => id !== doc.id)
-                                  : [...prev, doc.id],
-                              )
-                            }
-                            className="h-3.5 w-3.5 rounded border-[var(--border-medium)] accent-[var(--accent)]"
-                          />
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-                          <span className="truncate font-medium text-[var(--text-primary)]">
-                            {doc.title}
-                          </span>
-                        </span>
-                        <span className="shrink-0 font-mono text-[10px] text-[var(--text-secondary)]">
-                          {formatDocumentCategory(doc.category)} · {formatFileSize(doc.size_bytes)}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-
-              {nonReadyCount > 0 && (
-                <p className="text-[11px] text-[var(--text-secondary)]">
-                  {nonReadyCount} unverified, scanning, or rejected document{nonReadyCount === 1 ? ' is' : 's are'} hidden because only Ready documents can be linked.
-                </p>
-              )}
-
-              <div className="border-t border-[var(--border-subtle)] pt-3">
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)] mb-2">
-                  Upload &amp; Attach New Document
-                </p>
-                <DocumentUploadWidget
-                  compact
-                  submitLabel="Upload & attach"
-                  onUploaded={(doc) => {
-                    onDocumentUploaded(doc);
-                    if (isDocumentReady(doc)) {
-                      setSelectedDocIds((prev) =>
-                        prev.includes(doc.id) ? prev : [...prev, doc.id],
-                      );
-                    }
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/35 p-4 sm:flex-row sm:items-center sm:justify-between">
+            {/* Visibility */}
+            <section
+              aria-labelledby="edu-section-visibility"
+              className="flex flex-col gap-3 border-t border-[var(--border-subtle)] pt-5 sm:flex-row sm:items-center sm:justify-between"
+            >
               <div>
-                <p className="text-sm font-medium text-[var(--text-primary)]">Record visibility</p>
-                <p className="text-xs text-[var(--text-secondary)]">
+                <h3 id="edu-section-visibility" className={SECTION_HEADING_CLASS}>
+                  Visibility
+                </h3>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
                   {values.visibility === 'public'
                     ? 'Shown on your public folio when public education is enabled.'
-                    : 'Stored privately in your workspace and omitted from public views.'}
+                    : 'Private by default and hidden from public views.'}
                 </p>
               </div>
-              <div className="inline-flex rounded-full border border-[var(--border-medium)] bg-[var(--bg-main)] p-1">
-                {(['public', 'private'] as Visibility[]).map((option) => {
+              <div className="inline-flex self-start rounded-full border border-[var(--border-medium)] bg-[var(--bg-main)] p-1 sm:self-auto">
+                {(['private', 'public'] as Visibility[]).map((option) => {
                   const active = values.visibility === option;
                   return (
                     <button
                       key={option}
                       type="button"
+                      aria-pressed={active}
                       onClick={() => updateField('visibility', option)}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.08em] transition-colors ${
+                      className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.08em] transition-colors ${
                         active
                           ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)]'
                           : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -797,10 +655,10 @@ export const EducationFormModal: React.FC<EducationFormModalProps> = ({
                   );
                 })}
               </div>
-            </div>
+            </section>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)]/30 px-6 py-4">
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)]/30 px-6 py-3.5">
             <PillButton variant="secondary" onClick={onClose} disabled={saving}>
               Cancel
             </PillButton>
