@@ -23,6 +23,7 @@ import { useAuth } from '@/app/AuthContext';
 import { FolioLogo } from '@/design/components/FolioLogo';
 import { ThemeToggle } from '@/design/components/ThemeToggle';
 import { StrandCanvas } from '@/design/strands/StrandCanvas';
+import { resolveAvatarUrl } from '@/features/profile/profileHelpers';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { analyticsService } from '@/services/api';
 
@@ -42,6 +43,7 @@ const SIDEBAR_ITEMS: NavItem[] = [
   { label: 'Certificates', to: '/workspace/certificates', icon: Award },
   { label: 'Experience', to: '/workspace/experience', icon: Briefcase },
   { label: 'Resume Studio', to: '/workspace/resumes', icon: FileText },
+  { label: 'Settings', to: '/workspace/settings', icon: Settings },
 ];
 
 export const WorkspaceLayout: React.FC = () => {
@@ -54,15 +56,19 @@ export const WorkspaceLayout: React.FC = () => {
 
   const { data: dashboard } = useApiQuery(() => analyticsService.getDashboard(), []);
 
+  const avatarUrl = resolveAvatarUrl(user?.avatar_url ?? dashboard?.avatar_url ?? null);
+  const profileSlug = dashboard?.slug || user?.slug || '';
+  const displayName = user?.full_name || dashboard?.first_name || 'Folio360 Member';
+
   const initials = useMemo(() => {
-    const name = user?.full_name || 'Folio360 Member';
+    const name = displayName;
     return name
       .split(' ')
       .map((part) => part[0])
       .slice(0, 2)
       .join('')
       .toUpperCase();
-  }, [user?.full_name]);
+  }, [displayName]);
 
   const handleLogout = async () => {
     await logout();
@@ -180,16 +186,22 @@ export const WorkspaceLayout: React.FC = () => {
                   </Link>
                 )}
 
-                <ul className="mt-3 divide-y divide-[var(--border-subtle)]">
-                  {(dashboard?.recent_activity ?? []).slice(0, 4).map((ev) => (
-                    <li key={ev.id} className="py-2 text-xs">
-                      <p className="text-[var(--text-primary)]">{ev.label}</p>
-                      <p className="mt-0.5 font-mono text-[10px] uppercase text-[var(--text-secondary)]">
-                        {ev.verb} · {ev.entity_type}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
+                {(dashboard?.recent_activity ?? []).length === 0 ? (
+                  <p className="mt-3 py-2 text-xs text-[var(--text-secondary)]">
+                    No recent activity yet.
+                  </p>
+                ) : (
+                  <ul className="mt-3 divide-y divide-[var(--border-subtle)]">
+                    {(dashboard?.recent_activity ?? []).slice(0, 4).map((ev) => (
+                      <li key={ev.id} className="py-2 text-xs">
+                        <p className="text-[var(--text-primary)]">{ev.label}</p>
+                        <p className="mt-0.5 font-mono text-[10px] uppercase text-[var(--text-secondary)]">
+                          {ev.verb} · {ev.entity_type}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
           </div>
@@ -206,10 +218,10 @@ export const WorkspaceLayout: React.FC = () => {
               aria-expanded={userMenuOpen}
               className="flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2 hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer"
             >
-              {user?.avatar_url ? (
+              {avatarUrl ? (
                 <img
-                  src={user.avatar_url}
-                  alt={user.full_name}
+                  src={avatarUrl}
+                  alt={displayName}
                   className="h-8 w-8 rounded-full border border-[var(--border-medium)] object-cover"
                 />
               ) : (
@@ -224,7 +236,7 @@ export const WorkspaceLayout: React.FC = () => {
               <div className="absolute right-0 mt-2 w-60 rounded-xl border border-[var(--border-medium)] bg-[var(--bg-main)] p-2 shadow-lg">
                 <div className="border-b border-[var(--border-subtle)] px-3 py-2.5">
                   <p className="text-sm font-medium text-[var(--text-primary)]">
-                    {user?.full_name || 'Folio360 Member'}
+                    {displayName}
                   </p>
                   <p className="truncate font-mono text-[11px] text-[var(--text-secondary)]">
                     {user?.email || 'demo@example.com'}
@@ -239,14 +251,6 @@ export const WorkspaceLayout: React.FC = () => {
                   >
                     <User className="h-3.5 w-3.5" />
                     Profile
-                  </Link>
-                  <Link
-                    to="/workspace/settings"
-                    onClick={() => setUserMenuOpen(false)}
-                    className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
-                  >
-                    <Settings className="h-3.5 w-3.5" />
-                    Settings
                   </Link>
                   <Link
                     to="/"
@@ -295,7 +299,7 @@ export const WorkspaceLayout: React.FC = () => {
             {renderNavLinks()}
             <div className="px-3 pt-6 border-t border-[var(--border-subtle)]">
               <p className="font-mono text-[10px] tracking-wider text-[var(--text-secondary)]">
-                folio360.in/@{user?.slug || 'username'}
+                folio360.in/@{profileSlug || 'username'}
               </p>
             </div>
           </aside>

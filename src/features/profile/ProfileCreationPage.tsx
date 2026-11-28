@@ -23,76 +23,10 @@ import { validateFullName, validateUsername } from '@/features/auth/validation';
 import { profileService } from '@/services/api';
 import { ApiClientError } from '@/services/http';
 import type { ActivityCategory, CurrentActivityItem } from '@/types/api';
+import { ACTIVITY_OPTIONS, SUGGESTED_INTERESTS, resolveAvatarUrl } from './profileHelpers';
 import { ProfilePictureEditorModal } from './ProfilePictureEditorModal';
 
 type AvailabilityStatus = 'idle' | 'checking' | 'available' | 'unavailable';
-
-interface ActivityOption {
-  key: ActivityCategory;
-  label: string;
-  placeholder: string;
-}
-
-const ACTIVITY_OPTIONS: ActivityOption[] = [
-  {
-    key: 'studying',
-    label: 'Studying',
-    placeholder: 'e.g., Pursuing B.Tech in Computer Science',
-  },
-  {
-    key: 'working',
-    label: 'Working',
-    placeholder: 'e.g., Software Engineer at Acme Corp',
-  },
-  {
-    key: 'interning',
-    label: 'Interning',
-    placeholder: 'e.g., Backend Engineering Intern',
-  },
-  {
-    key: 'freelancing',
-    label: 'Freelancing',
-    placeholder: 'e.g., Working as a web developer',
-  },
-  {
-    key: 'job_seeking',
-    label: 'Job Seeking',
-    placeholder: 'e.g., Looking for full-stack roles',
-  },
-  {
-    key: 'researching',
-    label: 'Researching',
-    placeholder: 'e.g., Exploring distributed consensus systems',
-  },
-  {
-    key: 'building_project',
-    label: 'Building a Project / Startup',
-    placeholder: 'e.g., Developing a personal portfolio platform',
-  },
-  {
-    key: 'learning_skills',
-    label: 'Learning New Skills',
-    placeholder: 'e.g., Learning Rust and cloud architecture',
-  },
-  {
-    key: 'other',
-    label: 'Other',
-    placeholder: 'Optional short description',
-  },
-];
-
-const SUGGESTED_INTERESTS = [
-  'Software Engineering',
-  'AI & Machine Learning',
-  'UI/UX Design',
-  'Distributed Systems',
-  'Open Source',
-  'Data Science',
-  'Cybersecurity',
-  'Cloud & DevOps',
-  'Mobile Development',
-  'Product Management',
-];
 
 const INPUT_CLASS =
   'w-full rounded-lg border bg-[var(--bg-main)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40';
@@ -599,9 +533,9 @@ export const ProfileCreationPage: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                {avatarUrl ? (
+                {resolveAvatarUrl(avatarUrl) ? (
                   <img
-                    src={avatarUrl}
+                    src={resolveAvatarUrl(avatarUrl)!}
                     alt={fullName || 'Profile avatar'}
                     className="h-20 w-20 shrink-0 rounded-full border border-[var(--border-medium)] object-cover"
                   />

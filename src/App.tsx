@@ -23,6 +23,7 @@ import { ProfilePage } from '@/features/profile/ProfilePage';
 import { PublicProfilePage } from '@/features/profile/PublicProfilePage';
 import { ProjectsPage } from '@/features/projects/ProjectsPage';
 import { CertificatesPage } from '@/features/certificates/CertificatesPage';
+import { SettingsPage } from '@/features/settings/SettingsPage';
 import { SkillsPage } from '@/features/skills/SkillsPage';
 import { ModuleScaffoldPage } from '@/features/workspace/ModuleScaffoldPage';
 import { WorkspaceLayout } from '@/layouts/WorkspaceLayout';
@@ -113,22 +114,7 @@ export const App: React.FC = () => {
                   />
                 }
               />
-              <Route
-                path="settings"
-                element={
-                  <ModuleScaffoldPage
-                    sectionCode="ACCOUNT & PREFERENCES"
-                    title="Settings"
-                    description="Manage active sessions, OAuth connections, theme preferences, and security logs."
-                    contractEndpoints={[
-                      'GET /api/v1/account',
-                      'GET /api/v1/auth/sessions',
-                      'GET /api/v1/account/security-log',
-                      'PATCH /api/v1/profile/me/preferences',
-                    ]}
-                  />
-                }
-              />
+              <Route path="settings" element={<SettingsPage />} />
             </Route>
 
             <Route path="/u/:slug" element={<PublicProfilePage />} />

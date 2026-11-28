@@ -155,11 +155,29 @@ export const authService = {
     return httpClient.post('/auth/sessions/revoke-others');
   },
 
+  async changePassword(payload: {
+    current_password: string;
+    new_password: string;
+  }): Promise<AuthResponse> {
+    const res = await httpClient.post<AuthResponse>(
+      '/auth/change-password',
+      payload,
+      { headers: { 'X-Client-Type': 'web' } },
+    );
+    if (res.access_token) {
+      tokenStore.setAccessToken(res.access_token);
+    }
+    return { ...res, user: normalizeCurrentUser(res.user) };
+  },
+
   async logoutAll(): Promise<void> {
     try {
-      await httpClient.post('/auth/sessions/revoke-others');
+      await httpClient.post('/auth/logout-all', undefined, {
+        headers: { 'X-Client-Type': 'web' },
+        skipRefreshRetry: true,
+      });
     } finally {
-      await this.logout();
+      tokenStore.clear();
     }
   },
 };

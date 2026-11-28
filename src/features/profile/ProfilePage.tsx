@@ -10,6 +10,7 @@ import {
   Lock,
   Plus,
   Trash2,
+  X,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
@@ -19,7 +20,14 @@ import { StrandCanvas } from '@/design/strands/StrandCanvas';
 import { validateFullName, validateUsername } from '@/features/auth/validation';
 import { profileService } from '@/services/api';
 import { ApiClientError } from '@/services/http';
-import type { Profile, ProfileLinkItem, PublicSettings } from '@/types/api';
+import type {
+  ActivityCategory,
+  CurrentActivityItem,
+  Profile,
+  ProfileLinkItem,
+  PublicSettings,
+} from '@/types/api';
+import { ACTIVITY_OPTIONS, SUGGESTED_INTERESTS, resolveAvatarUrl } from './profileHelpers';
 import { ProfilePictureEditorModal } from './ProfilePictureEditorModal';
 
 function isValidHttpUrl(value: string): boolean {
@@ -104,6 +112,11 @@ export const ProfilePage: React.FC = () => {
   const [headline, setHeadline] = useState('');
   const [bio, setBio] = useState('');
   const [location, setLocation] = useState('');
+  const [interests, setInterests] = useState<string[]>([]);
+  const [customInterest, setCustomInterest] = useState('');
+  const [selectedActivities, setSelectedActivities] = useState<
+    Partial<Record<ActivityCategory, CurrentActivityItem>>
+  >({});
 
   // Contact
   const [contactEmail, setContactEmail] = useState('');
@@ -127,8 +140,11 @@ export const ProfilePage: React.FC = () => {
   const [copiedUrl, setCopiedUrl] = useState(false);
 
   const hydrateForm = useCallback((profile: Profile, vis: PublicSettings) => {
-    setAvatarUrl(profile.avatar_url);
-    setFullName(profile.full_name);
+    const links = profile.links ?? { other: [] };
+    const otherLinks = Array.isArray(links.other) ? links.other : [];
+
+    setAvatarUrl(profile.avatar_url ?? null);
+    setFullName(profile.full_name ?? '');
     setUsername(profile.slug || '');
     setSavedUsername(profile.slug || '');
     setUsernameStatus('unchanged');
@@ -136,18 +152,27 @@ export const ProfilePage: React.FC = () => {
     setHeadline(profile.headline ?? '');
     setBio(profile.bio ?? '');
     setLocation(profile.location ?? '');
+    setInterests(Array.isArray(profile.interests) ? profile.interests : []);
+    setCustomInterest('');
+    const activityMap: Partial<Record<ActivityCategory, CurrentActivityItem>> = {};
+    if (Array.isArray(profile.current_activities)) {
+      for (const item of profile.current_activities) {
+        activityMap[item.key] = item;
+      }
+    }
+    setSelectedActivities(activityMap);
     setContactEmail(profile.contact_email ?? '');
     setPhone(profile.phone ?? '');
     setWebsite(profile.website ?? '');
-    setLinkedin(profile.links.linkedin ?? '');
-    setGithub(profile.links.github ?? '');
+    setLinkedin(links.linkedin ?? '');
+    setGithub(links.github ?? '');
 
-    const portfolioEntry = (profile.links.other ?? []).find(
+    const portfolioEntry = otherLinks.find(
       (item) => item.label.trim().toLowerCase() === 'portfolio',
     );
     setPortfolioUrl(portfolioEntry?.url ?? '');
     setAdditionalLinks(
-      (profile.links.other ?? []).filter(
+      otherLinks.filter(
         (item) => item.label.trim().toLowerCase() !== 'portfolio',
       ),
     );
@@ -244,6 +269,59 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
+  const toggleInterest = (tag: string) => {
+    setInterests((prev) =>
+      prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag],
+    );
+  };
+
+  const handleAddCustomInterest = () => {
+    const cleaned = customInterest.trim();
+    if (!cleaned) return;
+    if (!interests.some((item) => item.toLowerCase() === cleaned.toLowerCase())) {
+      setInterests((prev) => [...prev, cleaned]);
+    }
+    setCustomInterest('');
+  };
+
+  const toggleActivity = (key: ActivityCategory) => {
+    setSelectedActivities((prev) => {
+      const next = { ...prev };
+      if (next[key]) {
+        delete next[key];
+      } else {
+        next[key] = { key, label: key === 'other' ? '' : undefined, description: '' };
+      }
+      return next;
+    });
+    if (key === 'other') {
+      setFieldErrors((prev) => ({ ...prev, otherLabel: '', [`activity_${key}`]: '' }));
+    } else {
+      setFieldErrors((prev) => ({ ...prev, [`activity_${key}`]: '' }));
+    }
+  };
+
+  const updateActivityField = (
+    key: ActivityCategory,
+    field: 'label' | 'description',
+    value: string,
+  ) => {
+    setSelectedActivities((prev) => {
+      const current = prev[key];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [key]: { ...current, [field]: value },
+      };
+    });
+    if (key === 'other' && field === 'label') {
+      setFieldErrors((prev) => ({ ...prev, otherLabel: '' }));
+    }
+    if (field === 'description') {
+      setFieldErrors((prev) => ({ ...prev, [`activity_${key}`]: '' }));
+    }
+  };
+
   const validateAllFields = (): Record<string, string> => {
     const errors: Record<string, string> = {};
     const nameErr = validateFullName(fullName);
@@ -255,8 +333,14 @@ export const ProfilePage: React.FC = () => {
     if (bio.trim().length > 1000) {
       errors.bio = 'Biography must be 1000 characters or fewer.';
     }
+    if (location.trim().length > 120) {
+      errors.location = 'Location must be 120 characters or fewer.';
+    }
     if (contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())) {
       errors.contact_email = 'Enter a valid contact email address.';
+    }
+    if (phone.trim().length > 32) {
+      errors.phone = 'Phone number must be 32 characters or fewer.';
     }
     if (!isValidHttpUrl(website)) {
       errors.website = 'Website must start with http:// or https://.';
@@ -277,6 +361,19 @@ export const ProfilePage: React.FC = () => {
         errors[`link_${idx}`] = 'URL must start with http:// or https://.';
       }
     });
+    const otherActivity = selectedActivities.other;
+    if (otherActivity) {
+      const customLabel = otherActivity.label?.trim() ?? '';
+      if (customLabel.length < 2 || customLabel.length > 80) {
+        errors.otherLabel = 'Custom activity label must be between 2 and 80 characters.';
+      }
+    }
+    for (const opt of ACTIVITY_OPTIONS) {
+      const entry = selectedActivities[opt.key];
+      if (entry?.description && entry.description.trim().length > 200) {
+        errors[`activity_${opt.key}`] = 'Activity description must be 200 characters or fewer.';
+      }
+    }
     return errors;
   };
 
@@ -306,6 +403,17 @@ export const ProfilePage: React.FC = () => {
         }
       }
 
+      const currentActivitiesPayload: CurrentActivityItem[] = ACTIVITY_OPTIONS.filter((opt) =>
+        Boolean(selectedActivities[opt.key]),
+      ).map((opt) => {
+        const entry = selectedActivities[opt.key]!;
+        return {
+          key: opt.key,
+          ...(opt.key === 'other' ? { label: entry.label?.trim() || null } : {}),
+          description: entry.description?.trim() || null,
+        };
+      });
+
       const [updatedProfile, updatedVis] = await Promise.all([
         profileService.updateMe({
           full_name: fullName.trim(),
@@ -320,6 +428,8 @@ export const ProfilePage: React.FC = () => {
             github: github.trim() || undefined,
             other: cleanOtherLinks,
           },
+          interests,
+          current_activities: currentActivitiesPayload,
         }),
         profileService.updateVisibility(visibility),
       ]);
@@ -328,9 +438,12 @@ export const ProfilePage: React.FC = () => {
       await refreshUser();
       setSaveSuccess('Profile and visibility settings saved.');
     } catch (err) {
-      setSaveError(
-        err instanceof ApiClientError ? err.message : 'Unable to save profile changes right now.',
-      );
+      if (err instanceof ApiClientError) {
+        const detailIssue = err.details.find((d) => d.issue)?.issue;
+        setSaveError(detailIssue || err.message);
+      } else {
+        setSaveError('Unable to save profile changes right now.');
+      }
     } finally {
       setSaving(false);
     }
@@ -376,6 +489,7 @@ export const ProfilePage: React.FC = () => {
   }
 
   const publicRoutePath = `/@${savedUsername}`;
+  const resolvedAvatarUrl = resolveAvatarUrl(avatarUrl);
 
   return (
     <div className="mx-auto max-w-[980px] px-6 py-10 md:px-10 md:py-12">
@@ -452,9 +566,9 @@ export const ProfilePage: React.FC = () => {
             {/* Profile Picture Preview & Controls */}
             <div className="flex flex-col gap-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/45 p-5 sm:flex-row sm:items-center">
               <div className="relative h-32 w-32 shrink-0 overflow-hidden rounded-xl border border-[var(--border-medium)] bg-[var(--bg-secondary)]">
-                {avatarUrl ? (
+                {resolvedAvatarUrl ? (
                   <img
-                    src={avatarUrl}
+                    src={resolvedAvatarUrl}
                     alt={`${fullName || 'User'} profile portrait`}
                     className="h-full w-full object-cover"
                   />
@@ -654,11 +768,214 @@ export const ProfilePage: React.FC = () => {
               <input
                 id="profile-location"
                 type="text"
+                maxLength={120}
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="e.g. Bengaluru, IN"
                 className="mt-1.5 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-main)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--text-primary)] focus:outline-none"
               />
+              {fieldErrors.location && (
+                <p role="alert" className="mt-1 text-xs text-[var(--danger-text)]">
+                  {fieldErrors.location}
+                </p>
+              )}
+            </div>
+
+            {/* Interests */}
+            <div>
+              <span className="block font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                Interests
+              </span>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                Select topics you focus on or add your own custom tags.
+              </p>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {SUGGESTED_INTERESTS.map((tag) => {
+                  const active = interests.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => toggleInterest(tag)}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors cursor-pointer ${
+                        active
+                          ? 'border-[var(--btn-primary-bg)] bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)]'
+                          : 'border-[var(--border-medium)] bg-[var(--bg-secondary)]/50 text-[var(--text-primary)] hover:border-[var(--text-primary)]'
+                      }`}
+                    >
+                      {active && <Check className="h-3 w-3" />}
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <input
+                  type="text"
+                  value={customInterest}
+                  onChange={(e) => setCustomInterest(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddCustomInterest();
+                    }
+                  }}
+                  placeholder="Add another interest…"
+                  aria-label="Add custom interest"
+                  className="max-w-xs flex-1 rounded-lg border border-[var(--border-medium)] bg-[var(--bg-main)] px-3.5 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--text-primary)] focus:outline-none"
+                />
+                <PillButton variant="secondary" size="sm" onClick={handleAddCustomInterest}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
+                </PillButton>
+              </div>
+
+              {interests.some((item) => !SUGGESTED_INTERESTS.includes(item)) && (
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  {interests
+                    .filter((item) => !SUGGESTED_INTERESTS.includes(item))
+                    .map((custom) => (
+                      <span
+                        key={custom}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-[var(--btn-primary-bg)] bg-[var(--btn-primary-bg)] px-3 py-1 text-xs text-[var(--btn-primary-text)]"
+                      >
+                        {custom}
+                        <button
+                          type="button"
+                          aria-label={`Remove ${custom}`}
+                          onClick={() => toggleInterest(custom)}
+                          className="rounded-full p-0.5 hover:opacity-80 cursor-pointer"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {/* Current Activities */}
+            <div>
+              <span className="block font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                Current Activities
+              </span>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                Choose all that apply right now and add an optional short description for each.
+              </p>
+
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {ACTIVITY_OPTIONS.map((opt) => {
+                  const isSelected = Boolean(selectedActivities[opt.key]);
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => toggleActivity(opt.key)}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'border-[var(--btn-primary-bg)] bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)]'
+                          : 'border-[var(--border-medium)] bg-[var(--bg-secondary)]/50 text-[var(--text-primary)] hover:border-[var(--text-primary)]'
+                      }`}
+                    >
+                      {isSelected && <Check className="h-3.5 w-3.5" />}
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {ACTIVITY_OPTIONS.some((opt) => Boolean(selectedActivities[opt.key])) && (
+                <div className="mt-3 space-y-3">
+                  {ACTIVITY_OPTIONS.filter((opt) => Boolean(selectedActivities[opt.key])).map(
+                    (opt) => {
+                      const entry = selectedActivities[opt.key]!;
+                      return (
+                        <div
+                          key={opt.key}
+                          className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/45 p-4"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-[var(--text-primary)]">
+                              {opt.label}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleActivity(opt.key)}
+                              className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                            >
+                              Remove
+                            </button>
+                          </div>
+
+                          {opt.key === 'other' && (
+                            <div className="mt-2.5">
+                              <label
+                                htmlFor="profile-activity-other-label"
+                                className="mb-1 block text-xs text-[var(--text-secondary)]"
+                              >
+                                Custom activity <span className="text-[var(--danger-text)]">*</span>
+                              </label>
+                              <input
+                                id="profile-activity-other-label"
+                                type="text"
+                                maxLength={80}
+                                value={entry.label ?? ''}
+                                onChange={(e) =>
+                                  updateActivityField('other', 'label', e.target.value)
+                                }
+                                placeholder="e.g., Mentoring, Volunteering, Gap Year"
+                                aria-invalid={Boolean(fieldErrors.otherLabel)}
+                                className={`w-full rounded-lg border bg-[var(--bg-main)] px-3.5 py-2 text-sm text-[var(--text-primary)] focus:outline-none ${
+                                  fieldErrors.otherLabel
+                                    ? 'border-[var(--danger-border)]'
+                                    : 'border-[var(--border-medium)] focus:border-[var(--text-primary)]'
+                                }`}
+                              />
+                              {fieldErrors.otherLabel && (
+                                <p role="alert" className="mt-1 text-xs text-[var(--danger-text)]">
+                                  {fieldErrors.otherLabel}
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="mt-2.5">
+                            <div className="mb-1 flex items-center justify-between">
+                              <label
+                                htmlFor={`profile-activity-desc-${opt.key}`}
+                                className="text-xs text-[var(--text-secondary)]"
+                              >
+                                Description (Optional)
+                              </label>
+                              <span className="font-mono text-[10px] text-[var(--text-secondary)]">
+                                {(entry.description ?? '').length}/200
+                              </span>
+                            </div>
+                            <input
+                              id={`profile-activity-desc-${opt.key}`}
+                              type="text"
+                              maxLength={200}
+                              value={entry.description ?? ''}
+                              onChange={(e) =>
+                                updateActivityField(opt.key, 'description', e.target.value)
+                              }
+                              placeholder={opt.placeholder}
+                              className="w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-main)] px-3.5 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--text-primary)] focus:outline-none"
+                            />
+                            {fieldErrors[`activity_${opt.key}`] && (
+                              <p role="alert" className="mt-1 text-xs text-[var(--danger-text)]">
+                                {fieldErrors[`activity_${opt.key}`]}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    },
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -743,11 +1060,22 @@ export const ProfilePage: React.FC = () => {
               <input
                 id="profile-phone"
                 type="tel"
+                maxLength={32}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  if (fieldErrors.phone) {
+                    setFieldErrors((p) => ({ ...p, phone: '' }));
+                  }
+                }}
                 placeholder="+91 98765 43210"
                 className="mt-1.5 w-full rounded-lg border border-[var(--border-medium)] bg-[var(--bg-main)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--text-primary)] focus:outline-none"
               />
+              {fieldErrors.phone && (
+                <p role="alert" className="mt-1 text-xs text-[var(--danger-text)]">
+                  {fieldErrors.phone}
+                </p>
+              )}
             </div>
 
             {/* Personal Website */}
@@ -1144,7 +1472,7 @@ export const ProfilePage: React.FC = () => {
 
       <ProfilePictureEditorModal
         open={editorOpen}
-        currentAvatarUrl={avatarUrl}
+        currentAvatarUrl={resolvedAvatarUrl}
         onClose={() => setEditorOpen(false)}
         onSaved={handleAvatarSaved}
         onRemoved={handleAvatarRemoved}

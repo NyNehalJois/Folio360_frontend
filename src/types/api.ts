@@ -1218,6 +1218,8 @@ export interface ActivityEvent {
 
 export interface DashboardSummary {
   first_name: string;
+  slug?: string | null;
+  avatar_url?: string | null;
   completeness: { percent: number };
   continue_items: {
     key: string;

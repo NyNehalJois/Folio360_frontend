@@ -15,8 +15,14 @@ export const accountService = {
     return httpClient.get<Account>('/account');
   },
 
-  requestEmailChange(payload: { new_email: string; current_password?: string }): Promise<void> {
-    return httpClient.post('/account/email', payload);
+  requestEmailChange(payload: {
+    new_email: string;
+    current_password?: string;
+  }): Promise<{ message: string; pending_email?: string | null }> {
+    return httpClient.post<{ message: string; pending_email?: string | null }>(
+      '/account/email',
+      payload,
+    );
   },
 
   confirmEmailChange(token: string): Promise<Account> {
@@ -50,10 +56,10 @@ export const accountService = {
     });
   },
 
-  requestExport(currentPassword?: string): Promise<DataExport> {
-    return httpClient.post<DataExport>(
+  requestExport(currentPassword?: string): Promise<Record<string, unknown>> {
+    return httpClient.post<Record<string, unknown>>(
       '/account/export',
-      currentPassword ? { current_password: currentPassword } : {},
+      currentPassword ? { current_password: currentPassword } : undefined,
     );
   },
 

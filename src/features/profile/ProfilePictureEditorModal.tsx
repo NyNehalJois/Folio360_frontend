@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { PillButton } from '@/design/components/PillButton';
+import { resolveAvatarUrl } from './profileHelpers';
 import { profileService } from '@/services/api';
 import { ApiClientError } from '@/services/http';
 
@@ -76,7 +77,7 @@ export const ProfilePictureEditorModal: React.FC<ProfilePictureEditorModalProps>
     setZoom(1);
     setOffset({ x: 0, y: 0 });
     setDimensions(null);
-    setSourceUrl(currentAvatarUrl);
+    setSourceUrl(resolveAvatarUrl(currentAvatarUrl));
     setOutputMime('image/jpeg');
   }, [open, currentAvatarUrl]);
 

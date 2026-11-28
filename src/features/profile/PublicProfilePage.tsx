@@ -32,6 +32,7 @@ import {
   getExperienceTypeLabel,
 } from '@/features/experience/experienceHelpers';
 import { useApiQuery } from '@/hooks/useApiQuery';
+import { resolveAvatarUrl } from './profileHelpers';
 import { resolveProjectImageUrl } from '@/features/projects/projectHelpers';
 import { publicService } from '@/services/api';
 import { ApiClientError } from '@/services/http';
@@ -147,9 +148,9 @@ export const PublicProfilePage: React.FC = () => {
             <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
                 <div className="h-28 w-28 sm:h-32 sm:w-32 shrink-0 overflow-hidden rounded-xl border border-[var(--border-medium)] bg-[var(--bg-secondary)]">
-                  {profile.avatar_url ? (
+                  {resolveAvatarUrl(profile.avatar_url) ? (
                     <img
-                      src={profile.avatar_url}
+                      src={resolveAvatarUrl(profile.avatar_url)!}
                       alt={`${profile.full_name} portrait`}
                       className="h-full w-full object-cover"
                     />
@@ -289,6 +290,16 @@ export const PublicProfilePage: React.FC = () => {
 
               {effectiveTab === 'education' && (
                 <div className="divide-y divide-[var(--border-subtle)]">
+                  {profile.sections.academics?.cgpa != null && (
+                    <div className="flex items-center justify-between py-4">
+                      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+                        Overall Academic CGPA
+                      </span>
+                      <span className="rounded-full border border-[var(--border-accent)] bg-[var(--bg-secondary)] px-3.5 py-1 font-mono text-xs font-medium text-[var(--text-primary)]">
+                        {profile.sections.academics.cgpa.toFixed(2)} CGPA
+                      </span>
+                    </div>
+                  )}
                   {(profile.sections.education ?? []).length === 0 ? (
                     <p className="py-6 text-sm text-[var(--text-secondary)]">
                       No public education records shared yet.
